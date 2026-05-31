@@ -1,0 +1,79 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[codz]
+*$py.class
+*.so
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Distribution / packaging
+.Python
+build/
+dist/
+eggs/
+.eggs/
+*.egg-info/
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+
+# Logs
+*.log
+
+# Sphinx docs
+docs/_build/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Environments
+.env
+.envrc
+.env.local
+.env.*.local
+.venv
+env/
+venv/
+ENV/
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Ruff
+.ruff_cache/
+
+# Node (if applicable)
+node_modules/
+npm-debug.log*
+.next/
+/out/
+
+# IDE
+.vscode/
+.idea/
+
+# PyPI
+.pypirc
