@@ -10,7 +10,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 |-------|------|--------|
 | 0 | Research writeup + environment spike | Complete |
 | 1 | Data pipeline (ETL → SQLite + SUMO inputs) | Complete |
-| 2 | End-to-end vertical slice (tracer bullet) | In Progress |
+| 2 | End-to-end vertical slice (tracer bullet) | Complete |
 | 3 | Visualization (clean cartographic + icons) | Not Started |
 | 4 | Demand modeling (realistic) | Not Started |
 | 5 | Scenarios (accident / closure injection) | Not Started |
@@ -72,7 +72,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 2: End-to-end vertical slice (In Progress)
+## Phase 2: End-to-end vertical slice (Complete)
 
 ### Tasks
 
@@ -81,15 +81,15 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 1 | Build scenario with placeholder demand (randomTrips/toy gateway OD) | Done | `sim/demand.py`: randomTrips, fringe-biased toward the bridge gateways |
 | 2 | Run one day via libsumo; emit sampled geo Parquet FCD | Done | `sim run`: SUMO batch → geo FCD Parquet; run registered in `runs`. Binary (not libsumo) for batch to avoid the libsumo/pyarrow Arrow clash — see decisions.md |
 | 3 | Post-process FCD → trajectory Parquet (path + timestamps + type) | Done | `sim/trace.py`: t/id/cls/lon/lat/speed/angle. Baseline 07:00–08:00 = 3,877 veh, peak 566, 1.57M rows (incl. 212k bus) |
-| 4 | FastAPI: stream trace as Arrow; serve network/zones as GeoJSON | Not Started | |
-| 5 | Minimal deck.gl + MapLibre viewer with day-scrubber | Not Started | Deliberately unpolished |
+| 4 | FastAPI: stream trace as Arrow; serve network/zones as GeoJSON | Done | `api/main.py`: `/api/runs`, `/api/runs/{id}/meta`, `/api/runs/{id}/trace` (Arrow IPC, time-windowed/strided), `/api/network` + `/api/zones` (GeoJSON), static viewer |
+| 5 | Minimal deck.gl + MapLibre viewer with day-scrubber | Done | `web/index.html`: MapLibre + deck.gl (zones/roads GeoJsonLayers, vehicles ScatterplotLayer by speed), play/scrub/speed + clock. Verified by headless screenshot |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Browser shows zones + roads + moving vehicles from a real SUMO run | Pending | **Key gate** |
-| Day-scrubber moves time forward/back | Pending | |
+| Browser shows zones + roads + moving vehicles from a real SUMO run | Done | **Key gate met** — headless screenshot shows the peninsula (Stanley Park/downtown/port zones), road net, and ~280 moving vehicles at 07:05 |
+| Day-scrubber moves time forward/back | Done | range scrubber bound to currentTime; play/pause + speed; time-of-day clock |
 
 ---
 
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 2 | **Phase 2 complete — backend + viewer (Tasks 4–5); key gate met.** `api/` FastAPI: net/zones GeoJSON + run trace as Arrow IPC (time-windowed). `web/index.html`: MapLibre + deck.gl viewer (zones/roads + vehicles colored by speed) with play/scrub/speed + time-of-day clock. Headless screenshot confirms the peninsula with moving vehicles at 07:05. Added fastapi + uvicorn. Fixed a Phase-1 bug: zones GeoJSON emitted `NaN` names (invalid JSON) — normalised in `etl/zoning.py` + regenerated. |
 | 2026-06-01 | 2 | **Phase 2 started — sim runner (Tasks 1–3).** `sim/` package: randomTrips placeholder demand (fringe-biased to gateways) → SUMO batch geo FCD Parquet → trajectory Parquet (t/id/cls/lon/lat/speed/angle), run registered in `runs`. Baseline (07:00–08:00, with transit): 3,877 vehicles, peak 566 concurrent, 1.57M rows incl. 212k bus, 32 MB. Validates the SUMO→trace path on the real projected net (clears the deferred Phase 0 geo+Parquet check). Added pyarrow; chose the sumo binary over libsumo for batch to avoid the libsumo/pyarrow Arrow clash (ADR in decisions.md). |
 | 2026-05-31 | 1 | **Phase 1 complete.** All ETL loaders done + verified; DB populated — network 1, zones 366, od_flows 456, departure_profiles 2,618, signals 254, scenarios/events 11, across 8 provenance-tracked sources. `etl network` emits a plain-XML baseline; the netedit/netdiff manual-refinement workflow is documented in phase-1.md. Optional manual net polish moved to backlog. |
 | 2026-05-31 | 1 | **Census loader (Task 4).** `etl census`: streamed StatCan 98-10-0459 (OD) + 98-10-0458 (departure) full-Canada tables, filtered to Greater Vancouver (CD 5915) → 456 intra-GVRD CSD→CSD flows + 2,618 departure rows. Verified: 222k intra-GVRD commuters into Vancouver (top origins Vancouver/Burnaby/Surrey/Richmond), AM-peak departure histogram, 57/23/19 car/transit/active mode split. Added plain-XML netdiff baseline to `etl network`. |

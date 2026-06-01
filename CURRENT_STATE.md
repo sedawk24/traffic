@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 2 (end-to-end vertical slice) in progress — the `sim` runner produces a registered trajectory trace; FastAPI backend + minimal viewer are next.**
+**Status: Phase 2 (end-to-end vertical slice) complete — the full chain runs (SUMO → trace → FastAPI/Arrow → deck.gl viewer); a real run replays in the browser. Phase 3 (visualization) is next.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -31,14 +31,20 @@ All loaders are idempotent `etl` steps (`uv run python -m etl <step>`):
 
 **Optional, deferred:** a manual `netedit` polish pass (lane counts/turns/gateway tagging). `etl network` already emits a plain-XML baseline and the netdiff workflow is documented (`phase-1.md`), so such edits can survive an OSM re-import.
 
+## Phase 2 — End-to-end vertical slice (complete)
+
+The full chain runs end to end and the **key gate is met** (a real SUMO run replays in the browser):
+- **Sim (`sim/`, Tasks 1–3).** `uv run python -m sim run`: randomTrips placeholder demand (fringe-biased to the bridges) → SUMO batch geo FCD Parquet → trajectory Parquet (`t/id/cls/lon/lat/speed/angle`), registered in `runs`. Baseline 07:00–08:00 = 3,877 vehicles, peak 566, 1.57M rows (incl. 212k bus).
+- **Backend (`api/`, Task 4).** FastAPI: `/api/network` + `/api/zones` (GeoJSON), `/api/runs/{id}/trace` (Arrow IPC, time-windowed), `/api/runs/{id}/meta`, and the static viewer. `uv run uvicorn api.main:app`.
+- **Viewer (`web/index.html`, Task 5).** MapLibre + deck.gl: land-use zones, road network, vehicles colored by speed, with play/pause, a day-scrubber, speed control, and a time-of-day clock. Verified by a headless screenshot (peninsula + ~280 moving vehicles at 07:05).
+
 ## What Is In Progress
 
-**Phase 2 — End-to-end vertical slice.** The `sim/` runner (Tasks 1–3) is done: `uv run python -m sim run` generates placeholder demand (randomTrips, fringe-biased to the bridges), runs SUMO (batch, geo FCD Parquet), post-processes to a trajectory Parquet (`t/id/cls/lon/lat/speed/angle`), and registers the run in `runs`. Baseline (07:00–08:00, with transit) = 3,877 vehicles, peak 566 concurrent, 1.57M rows (incl. buses), 32 MB at `data/runs/baseline/trajectory.parquet`. Next: the FastAPI backend (Task 4 — stream Arrow + serve net/zones GeoJSON) and the minimal deck.gl/MapLibre viewer with a day-scrubber (Task 5).
+Nothing actively in progress — Phase 2 is complete (key gate met). Ready to begin **Phase 3 (visualization)**: PMTiles basemap, polished cartography, vehicle icons by type, LOD, smooth zoom.
 
 ## What Is Next
 
-- **Phase 2 — End-to-end vertical slice (next).** One simulated day with placeholder demand → Parquet trace → FastAPI → minimal deck.gl viewer with a day-scrubber. *Proves every link in the chain.*
-- **Phase 3 — Visualization.** Make it beautiful: PMTiles basemap, land-use zones, styled roads/bridges/transit, vehicle icons by type, LOD, smooth zoom.
+- **Phase 3 — Visualization (next).** Make it beautiful: PMTiles basemap, land-use zones, styled roads/bridges/transit, vehicle icons by type, LOD, smooth zoom.
 - **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 - **Phase 5 — Scenarios.** Accident/closure injection via TraCI; before/after impact in the UI.
 - **Phase 6 — Scale & calibrate.** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.
