@@ -17,6 +17,7 @@ app = FastAPI(title="Greater Vancouver Traffic Simulator")
 
 ARROW_MEDIA = "application/vnd.apache.arrow.stream"
 GEOJSON_MEDIA = "application/geo+json"
+_VOL_CACHE: dict[int, dict] = {}
 
 
 def _run_row(run_id: int) -> dict:
@@ -59,6 +60,44 @@ def _ensure_network_geojson() -> Path:
                 "geometry": {"type": "LineString", "coordinates": coords},
             }
         )
+    out.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    return out
+
+
+def _ensure_transit_geojson() -> Path:
+    """Unique transit (bus) route polylines from the SUMO pt routes, as GeoJSON."""
+    import xml.etree.ElementTree as ET
+
+    import sumolib
+
+    net_file = config.SUMO_DIR / "peninsula.net.xml"
+    rou = config.SUMO_DIR / "peninsula_pt_vehicles.rou.xml"
+    out = config.SUMO_DIR / "peninsula_transit.geojson"
+    if not rou.exists():
+        raise HTTPException(404, "transit routes missing — run `etl transit`")
+    if out.exists() and out.stat().st_mtime >= rou.stat().st_mtime:
+        return out
+
+    net = sumolib.net.readNet(str(net_file))
+    features = []
+    for route in ET.parse(rou).getroot().iter("route"):
+        coords = []
+        for eid in (route.get("edges") or "").split():
+            if eid.startswith(":"):
+                continue
+            try:
+                edge = net.getEdge(eid)
+            except KeyError:
+                continue
+            coords += [list(net.convertXY2LonLat(x, y)) for x, y in edge.getShape()]
+        if len(coords) >= 2:
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": {"route": route.get("id")},
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                }
+            )
     out.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
     return out
 
@@ -144,9 +183,34 @@ def run_trips(run_id: int, every: int = Query(3, ge=1, description="sample every
     return Response(json.dumps(trips), media_type="application/json")
 
 
+@app.get("/api/runs/{run_id}/volumes")
+def run_volumes(run_id: int) -> dict:
+    """Per-edge traffic volume (distinct vehicles) over the run, for flow ribbons."""
+    if run_id in _VOL_CACHE:
+        return _VOL_CACHE[run_id]
+    import pandas as pd
+
+    r = _run_row(run_id)
+    fcd = Path(r["trace_path"]).with_name("fcd.parquet")
+    if not fcd.exists():
+        raise HTTPException(404, "fcd parquet missing for this run")
+    df = pd.read_parquet(fcd, columns=["vehicle_id", "vehicle_lane"])
+    lane = df["vehicle_lane"]
+    df = df[lane.notna() & ~lane.str.startswith(":")]
+    df["edge"] = df["vehicle_lane"].str.rsplit("_", n=1).str[0]
+    vol = df.groupby("edge")["vehicle_id"].nunique().astype(int).to_dict()
+    _VOL_CACHE[run_id] = vol
+    return vol
+
+
 @app.get("/api/network")
 def network() -> FileResponse:
     return FileResponse(_ensure_network_geojson(), media_type=GEOJSON_MEDIA)
+
+
+@app.get("/api/transit")
+def transit() -> FileResponse:
+    return FileResponse(_ensure_transit_geojson(), media_type=GEOJSON_MEDIA)
 
 
 @app.get("/api/zones")

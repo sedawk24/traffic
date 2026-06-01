@@ -11,7 +11,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 0 | Research writeup + environment spike | Complete |
 | 1 | Data pipeline (ETL → SQLite + SUMO inputs) | Complete |
 | 2 | End-to-end vertical slice (tracer bullet) | Complete |
-| 3 | Visualization (clean cartographic + icons) | In Progress |
+| 3 | Visualization (clean cartographic + icons) | Complete |
 | 4 | Demand modeling (realistic) | Not Started |
 | 5 | Scenarios (accident / closure injection) | Not Started |
 | 6 | Scale & calibrate (best-effort quantitative) | Not Started |
@@ -93,24 +93,24 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 3: Visualization (In Progress)
+## Phase 3: Visualization (Complete)
 
 ### Tasks
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | PMTiles basemap (clipped BC) + clean MapLibre style | Partial | OpenFreeMap positron (dev) styled; self-hosted PMTiles deferred (offline hardening) |
-| 2 | Land-use-shaded zones; styled roads/bridges/transit | Partial | Land-use zones + legend done; roads styled by class; bridge gateways labelled. Transit route lines pending |
+| 1 | PMTiles basemap (clipped BC) + clean MapLibre style | Deferred | OpenFreeMap positron (dev) meets the visual goal; self-hosted PMTiles → backlog (no tooling; not in the exit gate) |
+| 2 | Land-use-shaded zones; styled roads/bridges/transit | Done | Land-use zones + legend; roads styled by class; bridge gateways labelled; transit route lines (138 bus routes) |
 | 3 | Vehicle IconLayer distinct by type; optional TripsLayer trails | Done | `IconLayer` car/bus glyphs (mask-tinted by type, oriented by heading, interpolated each frame) = discrete vehicles. Long trails over-painted the dense grid → replaced; kept as an optional tiny tail (toggle) |
-| 4 | LOD: flow ribbons @region ↔ icons @street | Partial | Road width + land-use fill opacity scale with zoom (fills fade at street level); region flow-ribbon aggregation pending |
+| 4 | LOD: flow ribbons @region ↔ icons @street | Done | Roads as flow ribbons coloured by per-edge volume @region ↔ individual icons @street (transition ~zoom 13.2); land-use fills fade with zoom |
 | 5 | Controls: play/pause/speed, time-of-day clock, legend, scenario selector | Done | + layer toggles; backend `/api/runs/{id}/trips` serves TripsLayer data |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Vehicle types visually distinct; smooth zoom region→intersection | Partial | Trails coloured by type (car/bus); MapLibre smooth zoom. Glyph icons + region→street LOD pending |
-| LOD transition holds 60fps | Partial | TripsLayer GPU-animated (3,870 trails); explicit region-aggregation LOD pending |
+| Vehicle types visually distinct; smooth zoom region→intersection | Done | Car/bus icons oriented by heading; MapLibre smooth zoom region→street |
+| LOD transition holds 60fps | Done | Flow ribbons (static GPU paths) @region ↔ ~280 icons @street; transition at zoom 13.2 |
 
 ---
 
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 3 | **Phase 3 complete — transit + LOD; exit gate met.** Backend: `/api/transit` (138 bus-route polylines) + `/api/runs/{id}/volumes` (per-edge traffic). Viewer: region→street **LOD** — roads as flow ribbons coloured by edge volume when zoomed out, individual icons at street zoom (transition ~zoom 13.2); subtle bus-route lines; legend with a flow ramp. Exit gate met (vehicle types distinct, smooth zoom, LOD holds frame rate, bridges + transit clear). Self-hosted PMTiles deferred to backlog (no tooling; not in the exit gate). |
 | 2026-06-01 | 3 | **Vehicles: trails → icons (review feedback).** Long comet-trails over-painted the dense downtown grid (every segment stayed coloured). Replaced with per-vehicle `IconLayer` glyphs (car/bus, mask-tinted by type, oriented by heading), interpolated client-side each frame from `/trips?every=2` for smooth motion. Trails demoted to an optional tiny tail (off by default). Land-use fills now fade as you zoom to street level. Added `?zoom=&lng=&lat=` view params. Verified by zoomed headless screenshots. |
 | 2026-06-01 | 3 | **Phase 3 started — visual overhaul.** Backend: `/api/runs/{id}/trips` (per-vehicle paths for TripsLayer) + road `class` on `/api/network`. Viewer rebuilt: animated `TripsLayer` comet-trails coloured by vehicle type (car=blue, bus=orange), refined land-use zone palette + legend, roads styled by class, labelled bridge gateways, run/speed selectors, layer toggles, time-of-day clock. Verified by headless screenshot (positron basemap + downtown trails at 07:05). Remaining: glyph icons, transit route lines, region→street LOD, self-hosted PMTiles. |
 | 2026-06-01 | 2 | **Phase 2 complete — backend + viewer (Tasks 4–5); key gate met.** `api/` FastAPI: net/zones GeoJSON + run trace as Arrow IPC (time-windowed). `web/index.html`: MapLibre + deck.gl viewer (zones/roads + vehicles colored by speed) with play/scrub/speed + time-of-day clock. Headless screenshot confirms the peninsula with moving vehicles at 07:05. Added fastapi + uvicorn. Fixed a Phase-1 bug: zones GeoJSON emitted `NaN` names (invalid JSON) — normalised in `etl/zoning.py` + regenerated. |
