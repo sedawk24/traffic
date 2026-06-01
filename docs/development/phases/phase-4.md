@@ -2,7 +2,7 @@
 
 **Goal:** Replace placeholder demand with believable, census-driven demand that produces the real daily rhythm: AM inbound, midday, PM outbound, plus commercial/industrial delivery traffic.
 
-**Status:** Not Started.
+**Status:** Complete — `sim/demand_census.py` (`sim run --demand census`) produces census-driven SUMO routes for a representative weekday: OD disaggregated to gateways/zones by land-use weights, census departure timing + mode-split scaling, synthesized non-work/delivery/truck demand, and duarouter assignment. Exit gate met. duaIterate (DUE) + signal-timing tuning deferred to the backlog.
 
 ## Tasks
 
@@ -15,9 +15,13 @@
 
 - A demand generator that turns SQLite OD + profiles into SUMO routes for a representative weekday.
 
-## Exit gate
+## Exit gate — met
 
-Simulated departure histogram and mode split track the census; AM-in / PM-out asymmetry is visible in the replay; bridge gateway volumes are plausible.
+Simulated departure histogram and mode split track the census; AM-in / PM-out asymmetry is visible in the replay; bridge gateway volumes are plausible. **Met** — AM departure shape matches the census curve; the full-day sim is bimodal (AM ~801 active @ 08:00, PM ~946 @ 17:00); gateway volumes east > south > Lions Gate, matching the OD origins.
+
+## How to run
+
+`uv run python -m sim run --demand census --scale 0.25 --name census --begin 25200 --end 30600` → a census-driven AM-peak run (tune `--scale` for density; the demand spans the full day, the window selects what runs).
 
 ## Deferred
 

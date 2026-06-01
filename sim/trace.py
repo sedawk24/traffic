@@ -11,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def _classify(vtype: str) -> str:
-    s = (vtype or "").lower()
+def _classify(vtype) -> str:
+    s = (vtype if isinstance(vtype, str) else "").lower()
     if "bus" in s or "coach" in s:
         return "bus"
     if "tram" in s or "rail" in s or "train" in s or "subway" in s:

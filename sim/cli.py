@@ -16,6 +16,7 @@ from importlib import metadata
 
 from etl import config, db
 from sim import demand
+from sim import demand_census
 from sim import run as runner
 from sim import trace
 
@@ -39,6 +40,8 @@ def _register(args, traj_path, started_at: str, stats: dict) -> int:
     conn.execute("DELETE FROM runs WHERE trace_path = ?", (str(traj_path),))
     params = {
         "name": args.name,
+        "demand": args.demand,
+        "scale": args.scale,
         "begin": args.begin,
         "end": args.end,
         "period": args.period,
@@ -70,9 +73,12 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     print(f"=== sim run '{args.name}'  [{args.begin}..{args.end}s]  period={args.period}s ===")
     started = datetime.now().isoformat(timespec="seconds")
-    demand.generate(
-        net, routes, args.begin, args.end, args.period, args.fringe, args.seed, args.refresh_demand
-    )
+    if args.demand == "census":
+        demand_census.build_demand(routes, scale=args.scale, seed=args.seed, refresh=args.refresh_demand)
+    else:
+        demand.generate(
+            net, routes, args.begin, args.end, args.period, args.fringe, args.seed, args.refresh_demand
+        )
     print("  running SUMO (batch, geo FCD Parquet) ...")
     stats = runner.simulate(net, routes, fcd, args.begin, args.end, not args.no_transit)
     print("  post-processing FCD -> trajectory ...")
@@ -102,6 +108,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
     r = sub.add_parser("run", help="generate demand, run SUMO, post-process, register")
     r.add_argument("--name", default="baseline", help="run name (-> data/runs/<name>/)")
+    r.add_argument("--demand", choices=["random", "census"], default="random",
+                   help="demand model: random (placeholder) or census (Phase-4 census-driven)")
+    r.add_argument("--scale", type=float, default=0.12, help="census demand sub-sampling factor")
     r.add_argument("--begin", type=int, default=25200, help="sim begin (s of day; default 07:00)")
     r.add_argument("--end", type=int, default=28800, help="sim end (s of day; default 08:00)")
     r.add_argument("--period", type=float, default=1.0, help="veh insertion + FCD period (s)")
