@@ -8,7 +8,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 0 | Research writeup + environment spike | In Progress |
+| 0 | Research writeup + environment spike | Complete |
 | 1 | Data pipeline (ETL → SQLite + SUMO inputs) | Not Started |
 | 2 | End-to-end vertical slice (tracer bullet) | Not Started |
 | 3 | Visualization (clean cartographic + icons) | Not Started |
@@ -26,23 +26,24 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | Populate tracking files (CLAUDE.md, CURRENT_STATE.md, this tracker, backlog, README) | In Progress | Per CLAUDE.md initial-setup rule |
-| 2 | Log architectural decisions (ADRs) | In Progress | docs/architecture/decisions.md |
-| 3 | Write phase plan files (phase-0 … phase-6) | In Progress | docs/development/phases/ |
-| 4 | Write research deliverables | In Progress | data-sources, engine-selection, traffic-modeling-primer, signal-timing |
-| 5 | Commit documentation before code | Not Started | Hard rule |
-| 6 | Install SUMO 1.27 + libsumo/traci on macOS | Not Started | brew/pip; confirm GUI tools |
-| 7 | osmWebWizard tiny-area sanity run + geo Parquet FCD | Not Started | Prove the toolchain |
-| 8 | Throughput benchmark on target hardware | Not Started | Close the capacity-assumption gap |
+| 1 | Populate tracking files (CLAUDE.md, CURRENT_STATE.md, this tracker, backlog, README) | Complete | Per CLAUDE.md initial-setup rule |
+| 2 | Log architectural decisions (ADRs) | Complete | docs/architecture/decisions.md |
+| 3 | Write phase plan files (phase-0 … phase-6) | Complete | docs/development/phases/ |
+| 4 | Write research deliverables | Complete | data-sources, engine-selection, traffic-modeling-primer, signal-timing |
+| 5 | Commit documentation before code | Complete | Branch phase-0-setup |
+| 6 | Install SUMO 1.27 + libsumo/traci on macOS | Complete | `uv add`; arm64 wheels, no build |
+| 7 | Toolchain sanity run + FCD (XML & Parquet) | Complete | scripts/phase0_spike.py; geo + parquet supported |
+| 8 | Throughput benchmark on target hardware | Complete | 225k veh-updates/s; ~34× real-time @ 8k active |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| SUMO runs a tiny peninsula scenario and writes geo Parquet FCD | Pending | |
-| `python -c "import libsumo, traci"` succeeds | Pending | |
-| Benchmark recorded (vehicles/sec, faster-than-real-time factor) | Pending | |
-| Research docs cover data sources, engine choice, modeling primer, signal timing | Pending | |
+| SUMO runs headless and writes FCD (XML + Parquet; `--fcd-output.geo` present) | Done | Parquet FCD written directly by SUMO 1.27 |
+| `import libsumo, traci` succeeds | Done | libsumo/traci/sumolib 1.27.0 on arm64 |
+| Benchmark recorded (vehicle-updates/sec, faster-than-real-time factor) | Done | 225,334 UPS; ~34× real-time @ 8,023 active veh |
+| Research docs cover data sources, engine choice, modeling primer, signal timing | Done | docs/research/ |
+| Geo + Parquet FCD on the real (projected) peninsula net | Deferred → Phase 1 | Grid net is unprojected; validated on real net during ETL |
 
 ---
 
@@ -176,5 +177,6 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-05-31 | 0 | **Phase 0 complete.** SUMO 1.27 + libsumo verified on Apple Silicon via `uv`; FCD XML + Parquet and `--fcd-output.geo` confirmed; benchmark ~225k vehicle-updates/sec (~34× real-time at 8k active vehicles). Added pyproject.toml, uv.lock, scripts/phase0_spike.py. |
 | 2026-05-31 | 0 | Project planning complete; architecture + phased plan agreed. Phase 0 research verified (with corrections: RTDS retired, CoV counts not bulk, Trip Diary dashboard-only). Tracking files and research deliverables populated. |
 | 2026-05-31 | -- | Initial development tracker created |

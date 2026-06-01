@@ -1,8 +1,8 @@
 # Current State
 
-**Status: Phase 0 — Research & environment setup (in progress).**
+**Status: Phase 0 complete. Phase 1 (data pipeline) is next.**
 
-The system architecture and phased build plan are agreed. Phase 0 deep research is complete and being written up; the SUMO/Python toolchain spike is next. No application code yet.
+The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. No application code yet beyond the toolchain spike.
 
 ---
 
@@ -14,13 +14,11 @@ The system architecture and phased build plan are agreed. Phase 0 deep research 
   - ⚠️ City of Vancouver traffic counts are **locations + links, not a bulk feed**; calibration data is thinner than assumed.
   - ⚠️ TransLink **Trip Diary 2023** is a public dashboard only (no open microdata) — use StatCan "time leaving for work" tables for departure curves.
   - ✅ Solid: OSM→SUMO, TransLink GTFS static, StatCan 2021 commuting OD (98-10-0459 / 98-10-0458), Metro 2050 + Vancouver zoning, CoV signal locations, DriveBC Open511 closures.
+- **Toolchain verified (Phase 0 spike).** SUMO 1.27 + `libsumo`/`traci`/`sumolib` installed via `uv` on Apple Silicon (no build issues). SUMO writes FCD as XML **and Parquet** directly, and `--fcd-output.geo` is supported — validating the trace data path. Benchmark on this machine: **~225k vehicle-updates/sec, ~34× real-time at ~8,000 active vehicles** (`scripts/phase0_spike.py`).
 
 ## What Is In Progress
 
-**Phase 0 — Research writeup + environment spike.**
-- Writing the research deliverables into `docs/research/` (data sources, engine selection, traffic-modeling primer, signal timing). — *in progress*
-- Populating tracking files (this file, CLAUDE.md, development tracker, backlog, decisions, phase plans) and committing them before code. — *in progress*
-- Remaining: install SUMO 1.27 + `libsumo`/`traci` on macOS, run `osmWebWizard` on a tiny peninsula slice, emit geo Parquet FCD, record a throughput benchmark. **Gate:** toolchain proven before ETL.
+Nothing actively in progress — Phase 0 is complete and committed. Ready to begin **Phase 1 (data pipeline)**; see `docs/development/phases/phase-1.md`.
 
 ## What Is Next
 

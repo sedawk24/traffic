@@ -24,7 +24,7 @@ SUMO's microscopic core is **effectively single-core**: ~100k vehicle-updates/se
 4. **Output discipline** — sampled Parquet FCD, never raw 1 Hz XML region-wide.
 5. **Network-prep budget** — assume real human cleanup; lock it with `netdiff.py`.
 
-*Open gap:* the public throughput numbers come from an old reference machine — **benchmark on the real target hardware** in Phase 0 before sizing capacity.
+*Open gap (now closed):* the public throughput numbers come from an old reference machine, so we benchmarked the real target hardware in the Phase 0 spike. **Measured on this Apple Silicon machine (SUMO 1.27, libsumo, headless 20×20 grid): ~225,000 vehicle-updates/sec, ~34× real-time at ~8,000 simultaneously-active vehicles** (`scripts/phase0_spike.py`). That is ~2× the old 100k-UPS reference and confirms a full-day microscopic run of the downtown peninsula (far fewer than 8k concurrent vehicles) is tractable in minutes of wall-clock.
 
 ## Alternatives considered
 
