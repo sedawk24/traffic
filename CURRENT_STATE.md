@@ -40,7 +40,7 @@ The full chain runs end to end and the **key gate is met** (a real SUMO run repl
 
 ## What Is In Progress
 
-**Phase 3 — Visualization.** First increment done: the viewer (`web/index.html`) is rebuilt on MapLibre positron + deck.gl with an animated **`TripsLayer`** comet-trail per vehicle coloured by type (car/bus), a refined land-use zone palette + **legend**, roads styled by class, **labelled bridge gateways**, a **run selector**, speed control, **layer toggles**, and a time-of-day clock. Backend gained `/api/runs/{id}/trips` (per-vehicle paths) and a road `class` on `/api/network`. Remaining in Phase 3: glyph vehicle icons, transit route lines, explicit region→street LOD (flow ribbons → icons), and self-hosted PMTiles for an offline basemap.
+**Phase 3 — Visualization.** The viewer (`web/index.html`) is rebuilt on MapLibre positron + deck.gl: **per-vehicle icons** (`IconLayer` car/bus glyphs, tinted by type and oriented by heading, interpolated each frame for smooth motion), a refined land-use palette + **legend** (fills fade at street zoom), roads styled by class, **labelled bridge gateways**, a **run selector**, speed control, **layer toggles**, an optional tiny motion trail, and a time-of-day clock. Backend serves `/api/runs/{id}/trips` (per-vehicle paths) + a road `class` on `/api/network`. (Long comet-trails were tried first but over-painted the dense grid — replaced by icons per review.) Remaining in Phase 3: transit route lines, explicit region→street LOD (flow ribbons), and self-hosted PMTiles for an offline basemap.
 
 ## What Is Next
 
