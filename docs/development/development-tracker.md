@@ -12,7 +12,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 1 | Data pipeline (ETL → SQLite + SUMO inputs) | Complete |
 | 2 | End-to-end vertical slice (tracer bullet) | Complete |
 | 3 | Visualization (clean cartographic + icons) | Complete |
-| 4 | Demand modeling (realistic) | Not Started |
+| 4 | Demand modeling (realistic) | Complete |
 | 5 | Scenarios (accident / closure injection) | Not Started |
 | 6 | Scale & calibrate (best-effort quantitative) | Not Started |
 
@@ -114,23 +114,23 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 4: Demand modeling (Not Started)
+## Phase 4: Demand modeling (Complete)
 
 ### Tasks
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | Disaggregate CSD→CSD OD to peninsula zones + bridge gateways | Not Started | Weight by land use/pop/employment |
-| 2 | Mode split + stochastic departure times from 98-10-0458 | Not Started | Not everyone at 07:00 |
-| 3 | Synthesize non-work + commercial/delivery + heavy-truck demand | Not Started | Land-use heuristics + Trip Diary aggregates |
-| 4 | Assignment via duarouter/duaIterate → SUMO routes | Not Started | AM-in / midday / PM-out rhythm |
+| 1 | Disaggregate CSD→CSD OD to peninsula zones + bridge gateways | Done | `sim/demand_census.py`: edge↔zone sjoin + land-use emp/pop weights; external origins → directional bridge gateways; peninsula job/pop-share scaling |
+| 2 | Mode split + stochastic departure times from 98-10-0458 | Done | Stochastic departures from the census AM histogram (+ synthetic PM peak); car-mode-share scaling (transit = the Phase-1 buses) |
+| 3 | Synthesize non-work + commercial/delivery + heavy-truck demand | Done | Midday non-work + delivery-van + heavy-truck demand from land-use generators (vTypes car/hov/delivery/truck) |
+| 4 | Assignment via duarouter/duaIterate → SUMO routes | Done (one-shot) | `duarouter` → SUMO routes; `sim run --demand census`. duaIterate (DUE) + tls tuning deferred to backlog |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Departure histogram + mode split match census | Pending | |
-| AM-in / PM-out visible; bridge gateway volumes plausible | Pending | |
+| Departure histogram + mode split match census | Done | AM departure shape matches census (06:00/08:00 ratio 0.50 = census); car/transit/active split honoured via scaling |
+| AM-in / PM-out visible; bridge gateway volumes plausible | Done | Full-day sim is bimodal (AM ~801 @ 08:00, PM ~946 @ 17:00 active); gateway volumes east > south > Lions Gate, matching the OD |
 
 ---
 
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 4 | **Phase 4 complete — census demand; exit gate met.** `sim/demand_census.py` turns the SQLite OD (98-10-0459) + departure profiles (98-10-0458) + land-use zones into SUMO routes for a representative weekday: edge↔zone sjoin + emp/pop weights, external origins → directional bridge gateways, census AM departure curve (+ synthetic PM), car-mode-share scaling, and synthesized non-work/delivery/truck demand; duarouter assignment. `sim run --demand census`. Verified: AM departure shape matches census; full-day sim is bimodal (AM ~801 / PM ~946 active); gateway volumes east > south > Lions Gate (matches the OD). Fixed `trace._classify` for non-string vTypes. duaIterate + tls tuning → backlog. |
 | 2026-06-01 | 3 | **Signals: one indicator per approach (review).** Per-movement dots (3 per approach) read as confusing clutter. `tlscapture` now records each movement's incoming approach edge; the viewer groups movements by edge and shows a single green/yellow/red dot per approach (green if any movement is green, else yellow, else red), positioned at the approach's stop line — a normal traffic-light read. |
 | 2026-06-01 | 3 | **Signal-dot styling fix (review).** Signal markers used deck's default 1-*metre* stroke, so the ring ballooned to a solid black dot when zoomed in. Switched to a thin pixel-based white halo + radius that scales with zoom (clamped) — colour now reads clearly at street zoom. |
 | 2026-06-01 | 3 | **Live traffic signals + data-grounded bridges (review).** Built the live-signal feature: a libsumo pass (`sim/tlscapture.py`, separate process to avoid the Arrow clash) captures each light's per-approach state + stop-line positions over the run → `/api/runs/{id}/signals-live`; the viewer renders per-approach **red/green/amber dots at street zoom that cycle over time** (verified t=320 vs t=345 differ). Fixed bridge-gateway coordinates properly by extracting the named OSM bridge/viaduct way centroids (Cambie was ~600 m off); closure edges now 3–30 m from the bridges. |

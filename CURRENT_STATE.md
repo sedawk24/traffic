@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 3 (visualization) complete — polished, performant replay: per-vehicle icons, region→street LOD (flow ribbons ↔ icons), transit lines, legend + controls. Phase 4 (demand modeling) is next.**
+**Status: Phase 4 (demand modeling) complete — census-driven demand with a realistic AM-in/PM-out rhythm, mode split, and freight. Phase 5 (scenarios) is next.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -49,13 +49,21 @@ The replay is polished and performant; the exit gate is met. The viewer (`web/in
 
 Deferred: self-hosted PMTiles basemap (offline/no-cloud) → backlog (no tooling; not in the exit gate); OpenFreeMap is the dev basemap.
 
+## Phase 4 — Demand modeling (complete)
+
+`sim/demand_census.py` (`sim run --demand census`) turns the SQLite OD + departure profiles + land-use zones into census-driven SUMO routes for a representative weekday:
+- **OD disaggregation:** edge↔zone spatial join + land-use employment/population weights; external origins routed to the **directional bridge gateway** (North Shore→Lions Gate, south→False Creek bridges, east→viaducts); peninsula job/pop-share scaling.
+- **Timing + mode:** stochastic departures from the census AM "time-leaving" histogram (+ a synthetic PM peak); car-mode-share scaling (transit = the Phase-1 buses).
+- **Freight + non-work:** synthesized midday non-work + delivery-van + heavy-truck demand (vTypes car/hov/delivery/truck).
+- **Assignment:** `duarouter`. Verified: AM departure shape matches census; the full-day sim is **bimodal** (AM ~801 @ 08:00, PM ~946 @ 17:00 active); gateway volumes east > south > Lions Gate, matching the OD.
+
 ## What Is In Progress
 
-Nothing actively in progress — Phase 3 is complete (exit gate met). Ready to begin **Phase 4 (demand modeling)**: real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
+Nothing actively in progress — Phase 4 is complete (exit gate met). Ready to begin **Phase 5 (scenarios)**: TraCI accident/closure injection with before/after impact (the closure scenario library + bridge edges are already seeded).
 
 ## What Is Next
 
-- **Phase 4 — Demand modeling (next).** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
+- **Phase 5 — Scenarios (next).** Accident/closure injection via TraCI; before/after impact in the UI.
 - **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 - **Phase 5 — Scenarios.** Accident/closure injection via TraCI; before/after impact in the UI.
 - **Phase 6 — Scale & calibrate.** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.
