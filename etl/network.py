@@ -105,6 +105,10 @@ def _netconvert_args(osm_path: Path, net_path: Path) -> list[str]:
         "true",
         "--output.original-names",
         "true",
+        # Plain-XML baseline so a manual netedit pass can be captured as a netdiff
+        # patch (Task 2) and survive an OSM re-import.
+        "--plain-output-prefix",
+        str(net_path.with_name("peninsula.plain")),
     ]
     # Cordon trim: keep only edges inside the peninsula polygon, then the largest
     # connected component — drops the across-water spillover (North Shore, Kits,
