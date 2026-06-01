@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 2 (end-to-end vertical slice) complete — the full chain runs (SUMO → trace → FastAPI/Arrow → deck.gl viewer); a real run replays in the browser. Phase 3 (visualization) is next.**
+**Status: Phase 3 (visualization) complete — polished, performant replay: per-vehicle icons, region→street LOD (flow ribbons ↔ icons), transit lines, legend + controls. Phase 4 (demand modeling) is next.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -38,13 +38,24 @@ The full chain runs end to end and the **key gate is met** (a real SUMO run repl
 - **Backend (`api/`, Task 4).** FastAPI: `/api/network` + `/api/zones` (GeoJSON), `/api/runs/{id}/trace` (Arrow IPC, time-windowed), `/api/runs/{id}/meta`, and the static viewer. `uv run uvicorn api.main:app`.
 - **Viewer (`web/index.html`, Task 5).** MapLibre + deck.gl: land-use zones, road network, vehicles colored by speed, with play/pause, a day-scrubber, speed control, and a time-of-day clock. Verified by a headless screenshot (peninsula + ~280 moving vehicles at 07:05).
 
+## Phase 3 — Visualization (complete)
+
+The replay is polished and performant; the exit gate is met. The viewer (`web/index.html`, MapLibre positron + deck.gl):
+- **Per-vehicle icons** (car/bus glyphs oriented by heading, interpolated each frame) at street zoom, **coloured by congestion** (red = stopped → green = moving; toggle to colour by type). **Live per-approach traffic-signal states** (red/green/amber, cycling over time — captured from the run via libsumo) appear at street zoom. Bridge gateways are placed from OSM bridge-way centroids (data-grounded).
+- **Region→street LOD:** roads as **flow ribbons** coloured by per-edge traffic volume when zoomed out → individual icons at street zoom (transition ~zoom 13.2).
+- **Land-use zones** + legend (fills fade as you zoom in), roads styled by class, **labelled bridge gateways**, subtle **bus-route lines**.
+- **Controls:** run selector, speed, day-scrubber, time-of-day clock, layer toggles, `?zoom/&lng/&lat` view params.
+- **Backend:** `/api/transit`, `/api/runs/{id}/volumes`, `/api/runs/{id}/trips`, plus the Phase-2 network/zones/trace endpoints.
+
+Deferred: self-hosted PMTiles basemap (offline/no-cloud) → backlog (no tooling; not in the exit gate); OpenFreeMap is the dev basemap.
+
 ## What Is In Progress
 
-Nothing actively in progress — Phase 2 is complete (key gate met). Ready to begin **Phase 3 (visualization)**: PMTiles basemap, polished cartography, vehicle icons by type, LOD, smooth zoom.
+Nothing actively in progress — Phase 3 is complete (exit gate met). Ready to begin **Phase 4 (demand modeling)**: real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 
 ## What Is Next
 
-- **Phase 3 — Visualization (next).** Make it beautiful: PMTiles basemap, land-use zones, styled roads/bridges/transit, vehicle icons by type, LOD, smooth zoom.
+- **Phase 4 — Demand modeling (next).** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 - **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 - **Phase 5 — Scenarios.** Accident/closure injection via TraCI; before/after impact in the UI.
 - **Phase 6 — Scale & calibrate.** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.

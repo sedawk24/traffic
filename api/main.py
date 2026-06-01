@@ -17,6 +17,7 @@ app = FastAPI(title="Greater Vancouver Traffic Simulator")
 
 ARROW_MEDIA = "application/vnd.apache.arrow.stream"
 GEOJSON_MEDIA = "application/geo+json"
+_VOL_CACHE: dict[int, dict] = {}
 
 
 def _run_row(run_id: int) -> dict:
@@ -45,17 +46,58 @@ def _ensure_network_geojson() -> Path:
         if e.getID().startswith(":"):
             continue
         coords = [list(net.convertXY2LonLat(x, y)) for x, y in e.getShape()]
+        spd = e.getSpeed()
+        klass = "arterial" if spd >= 16 else "collector" if spd >= 11 else "local"
         features.append(
             {
                 "type": "Feature",
                 "properties": {
                     "id": e.getID(),
                     "lanes": e.getLaneNumber(),
-                    "speed": round(e.getSpeed(), 1),
+                    "speed": round(spd, 1),
+                    "class": klass,
                 },
                 "geometry": {"type": "LineString", "coordinates": coords},
             }
         )
+    out.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    return out
+
+
+def _ensure_transit_geojson() -> Path:
+    """Unique transit (bus) route polylines from the SUMO pt routes, as GeoJSON."""
+    import xml.etree.ElementTree as ET
+
+    import sumolib
+
+    net_file = config.SUMO_DIR / "peninsula.net.xml"
+    rou = config.SUMO_DIR / "peninsula_pt_vehicles.rou.xml"
+    out = config.SUMO_DIR / "peninsula_transit.geojson"
+    if not rou.exists():
+        raise HTTPException(404, "transit routes missing — run `etl transit`")
+    if out.exists() and out.stat().st_mtime >= rou.stat().st_mtime:
+        return out
+
+    net = sumolib.net.readNet(str(net_file))
+    features = []
+    for route in ET.parse(rou).getroot().iter("route"):
+        coords = []
+        for eid in (route.get("edges") or "").split():
+            if eid.startswith(":"):
+                continue
+            try:
+                edge = net.getEdge(eid)
+            except KeyError:
+                continue
+            coords += [list(net.convertXY2LonLat(x, y)) for x, y in edge.getShape()]
+        if len(coords) >= 2:
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": {"route": route.get("id")},
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                }
+            )
     out.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
     return out
 
@@ -116,9 +158,91 @@ def run_trace(
     return Response(content=sink.getvalue().to_pybytes(), media_type=ARROW_MEDIA)
 
 
+@app.get("/api/runs/{run_id}/trips")
+def run_trips(run_id: int, every: int = Query(3, ge=1, description="sample every Nth second")) -> Response:
+    """Per-vehicle paths + timestamps for a deck.gl TripsLayer (animated trails)."""
+    import pandas as pd
+
+    r = _run_row(run_id)
+    path = r["trace_path"]
+    if not path or not Path(path).exists():
+        raise HTTPException(404, "trace file missing")
+    df = pd.read_parquet(path, columns=["t", "id", "cls", "lon", "lat"])
+    if every > 1:
+        df = df[df["t"] % every == 0]
+    df = df.sort_values(["id", "t"])
+    trips = [
+        {
+            "cls": str(g["cls"].iloc[0]),
+            "path": g[["lon", "lat"]].round(6).values.tolist(),
+            "timestamps": g["t"].astype(int).tolist(),
+        }
+        for _, g in df.groupby("id", sort=False)
+        if len(g) > 1
+    ]
+    return Response(json.dumps(trips), media_type="application/json")
+
+
+@app.get("/api/runs/{run_id}/volumes")
+def run_volumes(run_id: int) -> dict:
+    """Per-edge traffic volume (distinct vehicles) over the run, for flow ribbons."""
+    if run_id in _VOL_CACHE:
+        return _VOL_CACHE[run_id]
+    import pandas as pd
+
+    r = _run_row(run_id)
+    fcd = Path(r["trace_path"]).with_name("fcd.parquet")
+    if not fcd.exists():
+        raise HTTPException(404, "fcd parquet missing for this run")
+    df = pd.read_parquet(fcd, columns=["vehicle_id", "vehicle_lane"])
+    lane = df["vehicle_lane"]
+    df = df[lane.notna() & ~lane.str.startswith(":")]
+    df["edge"] = df["vehicle_lane"].str.rsplit("_", n=1).str[0]
+    vol = df.groupby("edge")["vehicle_id"].nunique().astype(int).to_dict()
+    _VOL_CACHE[run_id] = vol
+    return vol
+
+
+@app.get("/api/runs/{run_id}/signals-live")
+def signals_live(run_id: int) -> FileResponse:
+    """Per-signal stop-line positions + state-change timeline (live red/green view)."""
+    r = _run_row(run_id)
+    f = Path(r["trace_path"]).with_name("tls_states.json")
+    if not f.exists():
+        raise HTTPException(404, "no captured signal states for this run — re-run `sim run`")
+    return FileResponse(f, media_type="application/json")
+
+
 @app.get("/api/network")
 def network() -> FileResponse:
     return FileResponse(_ensure_network_geojson(), media_type=GEOJSON_MEDIA)
+
+
+@app.get("/api/transit")
+def transit() -> FileResponse:
+    return FileResponse(_ensure_transit_geojson(), media_type=GEOJSON_MEDIA)
+
+
+@app.get("/api/signals")
+def signals() -> Response:
+    """City of Vancouver traffic-signal locations (shown at street zoom)."""
+    conn = db.connect()
+    rows = conn.execute(
+        "SELECT signal_id, lon, lat, sumo_tls_id FROM signals WHERE source = 'cov_signals'"
+    ).fetchall()
+    conn.close()
+    features = [
+        {
+            "type": "Feature",
+            "properties": {"id": r["signal_id"], "tls": r["sumo_tls_id"]},
+            "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]},
+        }
+        for r in rows
+        if r["lon"] is not None
+    ]
+    return Response(
+        json.dumps({"type": "FeatureCollection", "features": features}), media_type=GEOJSON_MEDIA
+    )
 
 
 @app.get("/api/zones")

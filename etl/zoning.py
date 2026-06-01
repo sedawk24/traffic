@@ -36,13 +36,14 @@ _COMMERCIAL = {"C", "MC"}
 
 # Virtual gateway zones at the bridge crossings (id, label, lon, lat). External
 # origins/destinations attach here in Phase 4; positions are approximate anchors.
+# Coordinates are centroids of the named OSM bridge/viaduct ways (data-grounded).
 GATEWAYS = [
-    ("gw_lions_gate", "Lions Gate Bridge / Stanley Park Causeway", -123.1385, 49.3170),
-    ("gw_burrard_bridge", "Burrard Bridge", -123.1430, 49.2715),
-    ("gw_granville_bridge", "Granville Bridge", -123.1300, 49.2700),
-    ("gw_cambie_bridge", "Cambie Bridge", -123.1075, 49.2705),
-    ("gw_georgia_viaduct", "Georgia / Dunsmuir Viaducts", -123.1010, 49.2790),
-    ("gw_east_arterials", "East arterials (Hastings / Prior / Clark)", -123.0820, 49.2800),
+    ("gw_lions_gate", "Lions Gate Bridge", -123.1362, 49.3181),
+    ("gw_burrard_bridge", "Burrard Bridge", -123.1387, 49.2749),
+    ("gw_granville_bridge", "Granville Bridge", -123.1357, 49.2704),
+    ("gw_cambie_bridge", "Cambie Bridge", -123.1149, 49.2712),
+    ("gw_georgia_viaduct", "Georgia / Dunsmuir Viaducts", -123.1066, 49.2778),
+    ("gw_east_arterials", "East gateways (Hastings Viaduct)", -123.0823, 49.2810),
 ]
 
 

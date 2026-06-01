@@ -1,0 +1,67 @@
+Project Brief: Greater Vancouver Traffic Simulator
+Your role and first task
+You are my engineering partner on an ambitious but bounded project. Before writing any code, I want you to act as a planning collaborator. Read this entire brief, then produce:
+
+A proposed system architecture and a phased build plan.
+A list of clarifying questions and any assumptions you are making.
+A risk assessment, calling out the parts most likely to be hard or to need rescoping.
+
+Do not start coding until we have agreed on the plan. I would rather spend the first session getting the plan right than rush into implementation.
+The vision
+Build a traffic simulator for the Greater Vancouver Regional District (Metro Vancouver) that is two things at once:
+
+As accurate as reasonably possible, driven by real public data on the street network, transit, commuting patterns, and traffic volumes.
+Visually excellent to watch, rendered in 2D in a web browser, with smooth zoom from regional overview down to individual intersections. Think SimCity, but more detailed and grounded in real geography.
+
+The map should render streets, bridges, and transit lines beautifully. Different vehicle types (private cars, carpools, buses, commercial delivery vans, heavy trucks) should be visually distinct. Different land-use zones (residential, commercial, industrial, parkland, downtown core) should be visibly rendered so the viewer understands where trips originate and where they are headed.
+The simulation should reproduce realistic daily rhythms: a morning peak with cars and transit flowing from residential areas toward downtown, commercial, and industrial destinations, general traffic through the day, commercial and industrial deliveries, and an afternoon peak in reverse. We should be able to inject accidents and road closures and watch the impact ripple through the network.
+Hard constraints on the tech stack
+
+Runs locally and in a web browser. No mandatory cloud services.
+Keep it simple. Prefer SQLite for storage unless you make a strong case otherwise.
+I am comfortable with Python and FastAPI and have shipped web apps before. Lean on that.
+
+Strong architectural recommendation (please pressure-test this)
+I do not want to build the traffic simulation engine from scratch. That is decades of specialist work. Instead, I want to:
+
+Use Eclipse SUMO as the simulation engine. It imports OpenStreetMap directly, models traffic signals, distinct vehicle types, and public transit, and exposes the TraCI Python API for live control, including injecting incidents and closures mid-run. It can emit per-vehicle floating-car-data (position, speed, type) at every timestep, which is the feed our renderer consumes.
+Build a custom, beautiful 2D visualization layer myself, since that is where a bespoke build adds the most value.
+Consider MATSim as a reference for the activity-based demand modeling (daily plans and origin-destination matrices), even if we do not adopt it for v1.
+
+Tell me if you disagree with using SUMO, and what the alternatives and tradeoffs are. If you agree, the rest of the stack I am proposing is:
+
+Data and ETL: Python, with osmnx for the OSM street network and pandas for the rest.
+Engine: SUMO, driven via its Python TraCI bindings.
+Storage: SQLite for the network, OD matrices, scenario configs, and simulation output traces. Propose a schema. If trace files get large, suggest whether Parquet alongside SQLite makes sense.
+Backend: FastAPI, to serve simulation traces to the front end and to launch and control scenarios.
+Front end: deck.gl layered over a MapLibre GL JS basemap for high-performance WebGL rendering of many moving vehicles with smooth zoom and clean layers for zones, roads, and vehicles. Evaluate PixiJS as an alternative if a more stylized sprite look is wanted. Recommend one.
+Execution pattern: Run the simulation as a batch job, store the per-timestep trace, and have the browser replay and render it. This decouples heavy compute from rendering and lets us scrub through a simulated day. A later version can drive SUMO live over websockets, but replay first.
+
+Phase 0: Deep research (do this before building, and write it up)
+I want a written research deliverable, not just code. Produce a short report covering two areas.
+A. Confirm and expand the data sources
+Verify availability, formats, access methods, and licensing for each of the following, and flag anything stale or missing. Add sources I have not listed.
+
+Street network: OpenStreetMap (via osmnx or direct OSM extracts for the Metro Vancouver bounding box).
+Transit: TransLink GTFS static (weekly), GTFS Realtime (vehicle positions and alerts), and the Regional Traffic Data System (near real-time average speeds and travel times on highways and major roads). All require a free API key from the TransLink developer portal.
+Commute demand: Statistics Canada 2021 Census journey-to-work data (municipality-to-municipality flows and mode share). Also investigate the TransLink Trip Diary survey for trip purpose and time-of-day distributions.
+Traffic volumes for calibration: City of Vancouver Transportation Data Collection Program (permanent count stations with hourly volumes by lane, plus intersection turning-movement counts), available through the City open data portal.
+Signal locations: City of Vancouver open data portal publishes traffic signal locations (not timing).
+Land use and zoning: Find open zoning and land-use layers for the Metro Vancouver municipalities. The regional district and individual municipalities publish GIS layers. Identify the best sources.
+Incidents and closures: Investigate DriveBC and any open feeds for real road closures, to make the scenario feature realistic.
+
+B. The signal-timing problem
+I know this is the hard one. The City sells signal timing reports (mainly to insurers and law firms after collisions) and does not publish timing plans as open data. Research the best practical approach to approximating signal timing for the simulation: sensible fixed-time defaults, coordinated green waves on arterials, and actuated-signal heuristics, and how to calibrate these against observed travel times rather than exact plans. Summarize the options and recommend an approach for v1.
+C. What good traffic models actually consider
+Research and summarize the standard components of serious traffic modeling so we do not reinvent a worse version of established practice. At minimum cover: the classic four-step model (trip generation, distribution, mode choice, route assignment); the distinction between macroscopic, mesoscopic, and microscopic simulation; car-following and lane-changing models; origin-destination matrices and activity-based demand; dynamic traffic assignment and equilibrium; signal control strategies; the role of stochasticity (departure-time distributions rather than everyone leaving at exactly 7am); and calibration and validation against real counts. Then recommend which of these we should implement in v1 versus defer, given our constraints.
+Build phases (propose adjustments)
+
+Phase 1: Data pipeline. Ingest the OSM network, GTFS transit, census OD flows, and count data into SQLite. Build the ETL so it is repeatable.
+Phase 2: Minimal working simulation on a small area. Pick a small, contained area (for example the downtown core plus West End, or a single corridor like Broadway) and get one full day simulated end to end in SUMO. Prove every link in the chain before scaling.
+Phase 3: Visualization. Build the 2D renderer: zoning layers, the road and bridge network, transit lines, and animated vehicles distinguished by type, with smooth zoom and day-scrubbing.
+Phase 4: Demand modeling. Turn census OD flows and trip-diary distributions into realistic time-of-day departure profiles by mode (car, carpool, bus, SkyTrain), plus commercial and industrial delivery traffic.
+Phase 5: Scenarios. Implement accident and road-closure injection via TraCI and surface the before-and-after impact in the UI.
+Phase 6: Scale up and calibrate. Expand from the test area toward full Metro Vancouver coverage, and calibrate simulated volumes against the City permanent count stations and TransLink travel-time data. Treat calibration as a first-class goal, since it is what separates a toy from a credible model.
+
+What I want from you right now
+Produce the architecture, the phased plan with any changes you would make, your clarifying questions, and the risk assessment. Recommend a concrete small test area for Phase 2. Then wait for my response before writing code.
