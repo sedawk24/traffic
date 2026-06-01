@@ -109,7 +109,7 @@ map.addControl(overlay);
 let T=+Q.get('t')||300, tMax=0, begin=25200, playing=Q.get('play')!=='0', speed=30, last=0, zoom=Z0;
 let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
 let sigGroups=[], sigChangesMap={};
-let runsList=[], closedEdge=null, scenarioInfo=null;
+let runsList=[], closedEdges=[], closedMarker=null, scenarioInfo=null;
 const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
 init().catch(e => { const l=document.getElementById('loading'); if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
@@ -142,7 +142,8 @@ async function loadRun(id){
 
   // scenario compare (Phase 5): closed edge + before/after metrics vs a baseline run
   const p = meta.params || {}, mt = (meta.stats || {}).metrics;
-  closedEdge = p.closure ? p.closure.edge : null;
+  closedEdges = (p.closure && p.closure.edges) || (p.closure && p.closure.edge ? [p.closure.edge] : []);
+  closedMarker = p.closure ? p.closure.edge : null;
   scenarioInfo = null;
   if (p.scenario && p.scenario !== 'baseline'){
     const base = runsList.find(r => r.params && r.params.scenario === 'baseline'
@@ -185,7 +186,9 @@ async function init(){
   const sel = document.getElementById('scenario');
   sel.innerHTML = runs.map(r=>`<option value="${r.run_id}">${(r.params&&r.params.name)||('run '+r.run_id)}</option>`).join('');
   sel.onchange = async e => { await loadRun(+e.target.value); render(); };
-  await loadRun(runs[0]?.run_id ?? 1);
+  const wantRun = +Q.get('run') || (runs[0]?.run_id ?? 1);
+  sel.value = wantRun;
+  await loadRun(wantRun);
   buildLegend(); buildToggles();
   document.getElementById('loading').remove();
   render(); requestAnimationFrame(tick);
@@ -219,12 +222,13 @@ function layers(){
     lineWidthUnits:'pixels', lineWidthMinPixels:0.4, updateTriggers:{getLineColor:flow, getLineWidth:flow}, parameters:{depthTest:false} }));
   if (show.transit && transitGeo) L.push(new deck.GeoJsonLayer({ id:'transit', data:transitGeo, stroked:true, filled:false,
     getLineColor:TRANSIT_COL, getLineWidth:1, lineWidthUnits:'pixels', lineWidthMinPixels:0.7, parameters:{depthTest:false} }));
-  if (closedEdge && roads){
-    const f = roads.features.find(x=>x.properties.id===closedEdge);
-    if (f){
-      L.push(new deck.GeoJsonLayer({ id:'closed', data:{type:'FeatureCollection',features:[f]}, stroked:true, filled:false,
+  if (closedEdges.length && roads){
+    const set=new Set(closedEdges), feats=roads.features.filter(x=>set.has(x.properties.id));
+    if (feats.length){
+      L.push(new deck.GeoJsonLayer({ id:'closed', data:{type:'FeatureCollection',features:feats}, stroked:true, filled:false,
         getLineColor:[230,40,40], getLineWidth:5, lineWidthUnits:'pixels', lineWidthMinPixels:3, parameters:{depthTest:false} }));
-      const cc=f.geometry.coordinates, mid=cc[Math.floor(cc.length/2)];
+      const mk=feats.find(f=>f.properties.id===closedMarker)||feats[0];
+      const cc=mk.geometry.coordinates, mid=cc[Math.floor(cc.length/2)];
       L.push(new deck.TextLayer({ id:'closedlbl', data:[{position:mid}], getPosition:d=>d.position, getText:()=>'✕ closed',
         getSize:13, getColor:[200,30,30], background:true, getBackgroundColor:[255,255,255,225], backgroundPadding:[4,3], getPixelOffset:[0,-15], fontWeight:700 }));
     }

@@ -35,13 +35,17 @@ def _scenario_event(name: str) -> dict | None:
     """The closure event (edge + window) for a named scenario, if any."""
     conn = db.connect()
     row = conn.execute(
-        "SELECT e.target, e.start_s, e.end_s FROM scenarios s JOIN events e "
+        "SELECT e.target, e.start_s, e.end_s, e.params FROM scenarios s JOIN events e "
         "ON e.scenario_id = s.scenario_id WHERE s.name = ? AND e.kind = 'closure' "
         "ORDER BY e.event_id LIMIT 1",
         (name,),
     ).fetchone()
     conn.close()
-    return dict(row) if row else None
+    if row is None:
+        return None
+    d = dict(row)
+    d["edges"] = json.loads(d.get("params") or "{}").get("edges") or ([d["target"]] if d["target"] else [])
+    return d
 
 
 def _tripinfo_metrics(path: Path) -> dict:
@@ -86,7 +90,7 @@ def _register(args, traj_path, started_at, stats, scenario_name, closure) -> int
         "seed": args.seed,
         "with_transit": not args.no_transit,
         "closure": (
-            {"edge": closure[0], "start": closure[1], "end": closure[2]}
+            {"edges": closure[0].split(","), "edge": closure[3], "start": closure[1], "end": closure[2]}
             if closure[0] != "-"
             else None
         ),
@@ -114,12 +118,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     fcd, traj = run_dir / "fcd.parquet", run_dir / "trajectory.parquet"
     tls_out, tripinfo = run_dir / "tls_states.json", run_dir / "tripinfo.xml"
 
-    closure, scenario_name = ("-", 0, 0), "baseline"
+    closure, scenario_name = ("-", 0, 0, None), "baseline"
     if args.scenario:
         ev = _scenario_event(args.scenario)
         if not ev:
             raise SystemExit(f"scenario '{args.scenario}' has no closure event (see `etl events`)")
-        closure, scenario_name = (ev["target"], ev["start_s"], ev["end_s"]), args.scenario
+        edges = ",".join(ev["edges"]) if ev["edges"] else "-"
+        closure, scenario_name = (edges, ev["start_s"], ev["end_s"], ev["target"]), args.scenario
 
     print(f"=== sim run '{args.name}'  [{args.begin}..{args.end}s]  scenario={scenario_name} ===")
     started = datetime.now().isoformat(timespec="seconds")

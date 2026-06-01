@@ -59,7 +59,9 @@ Deferred: self-hosted PMTiles basemap (offline/no-cloud) → backlog (no tooling
 
 ## Phase 5 — Scenarios (complete)
 
-`sim/librun.py` unifies the run into one libsumo process (geo FCD + per-approach signals + tripinfo) and can inject a **mid-run closure** — disallow a bridge edge's lanes at the event time, with rerouting devices so traffic redistributes. `sim run --scenario close_<bridge>`. The viewer's run selector picks a run; a **scenario panel** shows Δ avg travel / wait / trips-done vs a matched baseline and **highlights the closed edge** (✕). Demo: closing Granville at 08:00 vacated the bridge (200→2 vehicles) and rerouted traffic (+14 s travel/wait, −96 trips). The closure library (5 bridges) was seeded in Phase 1.
+`sim/librun.py` unifies the run into one libsumo process (geo FCD + per-approach signals + tripinfo) and can inject a **mid-run closure** — disallow the **whole bridge's** lanes at the event time, with rerouting devices so traffic redistributes. `sim run --scenario close_<bridge>`. The viewer's run selector (`?run=` param) picks a run; a **scenario panel** shows Δ avg travel / wait / trips-done vs a matched baseline and **highlights the closed edges** (✕). The closure library (5 bridges) was seeded in Phase 1.
+
+A closure targets the **full structure, not one edge.** `etl events` now derives each bridge's complete drivable edge set (both directions + ramps) by buffering the named OSM bridge ways and intersecting the SUMO net — e.g. Granville = **43 edges** (was 1), Cambie 48, Georgia/Dunsmuir 54, Burrard 8, Lions Gate 2. `librun` closes every lane of every edge; the viewer reds them all. Verified on Granville closing at 08:00 (07:00–09:00 AM run, scale 0.18): the bridge carried 22,895 vehicle-frames while open, **0 new entries after the closure** (both directions), the 3 vehicles mid-span cleared by 08:04, then the deck stayed empty; network impact −174 trips / +8 s travel / +6 s wait vs the matched baseline (modest — Burrard & Cambie absorb the rerouted demand). This fixed a bug where closing a bridge barred only one edge/direction, leaving the opposite direction and other segments open.
 
 ## What Is In Progress
 
@@ -83,4 +85,4 @@ Nothing actively in progress — Phase 5 is complete (exit gate met). Ready to b
 
 ---
 
-*Last updated: 2026-05-31*
+*Last updated: 2026-06-01*

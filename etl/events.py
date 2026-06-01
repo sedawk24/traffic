@@ -52,6 +52,55 @@ def _nearest_edge(net, lon: float, lat: float) -> tuple[str | None, float]:
     return best, best_d
 
 
+# gateway -> name fragments of the OSM bridge/viaduct ways that make up the structure
+BRIDGE_OSM_NAMES = {
+    "gw_lions_gate": ["Lions Gate Bridge"],
+    "gw_burrard_bridge": ["Burrard Street Bridge", "Burrard Bridge"],
+    "gw_granville_bridge": ["Granville Bridge"],
+    "gw_cambie_bridge": ["Cambie Bridge", "Cambie Street Bridge"],
+    "gw_georgia_viaduct": ["Georgia Viaduct", "Dunsmuir Viaduct"],
+    "gw_east_arterials": ["Hastings Viaduct"],
+}
+
+
+def _bridge_edges(net) -> dict[str, list[str]]:
+    """Every drivable SUMO edge that makes up each bridge (both directions, all
+    segments) — found by buffering the named OSM bridge ways and intersecting."""
+    import xml.etree.ElementTree as ET
+
+    osm = config.OSM_DIR / "peninsula_bbox.osm.xml"
+    frag_to_gw = {frag: gw for gw, frags in BRIDGE_OSM_NAMES.items() for frag in frags}
+    nodes: dict[str, tuple[float, float]] = {}
+    buf_by_gw: dict[str, object] = {}
+    for _ev, el in ET.iterparse(str(osm), events=("end",)):
+        if el.tag == "node":
+            nodes[el.get("id")] = (float(el.get("lon")), float(el.get("lat")))
+            el.clear()
+        elif el.tag == "way":
+            name, is_bridge, refs = None, False, []
+            for c in el:
+                if c.tag == "nd":
+                    refs.append(c.get("ref"))
+                elif c.tag == "tag":
+                    if c.get("k") == "name":
+                        name = c.get("v")
+                    if c.get("k") == "bridge":
+                        is_bridge = True
+            if name and is_bridge:
+                gw = next((g for frag, g in frag_to_gw.items() if frag in name), None)
+                pts = [net.convertLonLat2XY(*nodes[r]) for r in refs if r in nodes]
+                if gw and len(pts) >= 2:
+                    line = LineString(pts).buffer(20)
+                    buf_by_gw[gw] = buf_by_gw[gw].union(line) if gw in buf_by_gw else line
+            el.clear()
+    drivable = [
+        (e.getID(), LineString(e.getShape()))
+        for e in net.getEdges()
+        if not e.getID().startswith(":") and e.allows("passenger") and len(e.getShape()) >= 2
+    ]
+    return {gw: [eid for eid, geom in drivable if buf.intersects(geom)] for gw, buf in buf_by_gw.items()}
+
+
 def _fetch_drivebc() -> list[dict]:
     import requests
 
@@ -72,14 +121,22 @@ def run(args) -> int:
     conn = db.connect()
     db.init_db(conn)
     conn.execute("DELETE FROM events WHERE source IN ('seed', 'drivebc')")
+    # detach any runs referencing the scenarios we're about to rebuild (FK)
+    conn.execute(
+        "UPDATE runs SET scenario_id = NULL WHERE scenario_id IN "
+        "(SELECT scenario_id FROM scenarios WHERE name LIKE 'close_%' OR name LIKE 'drivebc_%')"
+    )
     conn.execute("DELETE FROM scenarios WHERE name LIKE 'close_%' OR name LIKE 'drivebc_%'")
 
-    # 1. Canonical bridge-closure scenarios, wired to the nearest net edge.
+    # 1. Canonical bridge-closure scenarios — the full bridge edge set (both
+    #    directions + all segments), with the nearest edge kept as the map marker.
+    bridge_edges = _bridge_edges(net)
     seeded = 0
     for zid, label, lon, lat in GATEWAYS:
         if zid not in BRIDGE_GATEWAYS:
             continue
-        edge, dist = _nearest_edge(net, lon, lat)
+        edge, _dist = _nearest_edge(net, lon, lat)
+        all_edges = bridge_edges.get(zid) or ([edge] if edge else [])
         sid = conn.execute(
             "INSERT INTO scenarios(name, description, base_network, created_at) "
             "VALUES(?, ?, 'peninsula', datetime('now'))",
@@ -88,10 +145,10 @@ def run(args) -> int:
         conn.execute(
             """INSERT INTO events(scenario_id, kind, target, lane, start_s, end_s, params, source)
                VALUES(?, 'closure', ?, NULL, 28800, 43200, ?, 'seed')""",
-            (sid, edge, json.dumps({"gateway": zid})),
+            (sid, edge, json.dumps({"gateway": zid, "edges": all_edges})),
         )
         seeded += 1
-        print(f"  seed: close_{zid.removeprefix('gw_'):16s} -> {edge} ({dist:.0f} m)")
+        print(f"  seed: close_{zid.removeprefix('gw_'):16s} -> {len(all_edges)} edges (marker {edge})")
 
     # 2. Live DriveBC events near the approaches (reference library; no edge target).
     drivebc = _fetch_drivebc()

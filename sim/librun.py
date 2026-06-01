@@ -104,10 +104,11 @@ def run(
 
     close_lanes = []
     if closure_edge and closure_edge != "-":
-        try:
-            close_lanes = [ln.getID() for ln in net.getEdge(closure_edge).getLanes()]
-        except KeyError:
-            close_lanes = []
+        for eid in closure_edge.split(","):  # the full bridge edge set (both directions)
+            try:
+                close_lanes += [ln.getID() for ln in net.getEdge(eid).getLanes()]
+            except KeyError:
+                pass
 
     changes: dict[str, list] = {t: [] for t in ids}
     last: dict[str, str] = {}
