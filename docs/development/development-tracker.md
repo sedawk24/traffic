@@ -13,7 +13,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 2 | End-to-end vertical slice (tracer bullet) | Complete |
 | 3 | Visualization (clean cartographic + icons) | Complete |
 | 4 | Demand modeling (realistic) | Complete |
-| 5 | Scenarios (accident / closure injection) | Not Started |
+| 5 | Scenarios (accident / closure injection) | Complete |
 | 6 | Scale & calibrate (best-effort quantitative) | Not Started |
 
 **v1 north star:** a polished, fully-working vertical slice on the **downtown Vancouver peninsula** (cordoned at the bridges). Region-wide coverage is a later expansion, not a v1 gate.
@@ -134,22 +134,22 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 5: Scenarios (Not Started)
+## Phase 5: Scenarios (Complete)
 
 ### Tasks
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | TraCI mid-run injection: close edge/lane, stop vehicle, drop speed | Not Started | |
-| 2 | Reroute affected traffic | Not Started | |
-| 3 | DriveBC Open511 closure library | Not Started | Highways/bridges |
-| 4 | Before/after UI: baseline vs scenario, delta metrics | Not Started | Travel time, queue, throughput |
+| 1 | TraCI mid-run injection: close edge/lane, stop vehicle, drop speed | Done (closure) | `sim/librun.py`: disallow the **whole bridge's** lanes at the event time (+ reopen). Accident (stop-vehicle) + speed-drop are the same TraCI pattern → backlog |
+| 2 | Reroute affected traffic | Done | `--device.rerouting` on all vehicles; closing Granville bars the full structure (both directions) — 0 new entries after 08:00 — and traffic redistributes to Burrard/Cambie |
+| 3 | DriveBC Open511 closure library | Done | Seeded in Phase 1 (`etl events`): 5 canonical bridge closures, each the **full OSM-derived edge set** (Granville 43, Cambie 48, viaducts 54, Burrard 8, Lions Gate 2) + live DriveBC events |
+| 4 | Before/after UI: baseline vs scenario, delta metrics | Done | Run selector (`?run=`) + scenario panel: Δ avg travel / avg wait / trips-done vs a matched baseline; **all** closed edges highlighted (✕) on the map |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Inject closure → observe rerouting + before/after deltas | Pending | "Close Lions Gate Bridge" demo |
+| Inject closure → observe rerouting + before/after deltas | Done | Granville full-bridge closure (07:00–09:00, scale 0.18): 22,895 vehicle-frames while open → **0 new entries after 08:00** (both directions), 3 mid-span vehicles cleared by 08:04; Δ −174 trips / +8 s travel / +6 s wait vs matched baseline. Verified by FCD edge-occupancy query + headless screenshot (empty red span) |
 
 ---
 
@@ -177,6 +177,9 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 5 | **Fix: closure highlight is time-gated to the closure window.** The red "✕ closed" edges + scenario header showed from 07:00 even though Granville doesn't close until 08:00 — confusing (bridge marked closed while traffic crossed it). `web/index.html` now only reds the closed edges when `begin+T` is within `[closure.start, closure.end)`, and a live panel header reads "closes 08:00" (amber) → "✕ closed" (red) → "reopened" (green). Verified via DOM dump at 07:30 (amber, unmarked) vs 08:10 (red, ✕). |
+| 2026-06-01 | 5 | **Fix: closures now bar the whole bridge, not one edge.** A closed bridge had traffic running the opposite way because only the single nearest edge/direction was disallowed. `etl events` now derives each bridge's full drivable edge set (both directions + ramps) by buffering the named OSM bridge ways and intersecting the SUMO net (`_bridge_edges` + `BRIDGE_OSM_NAMES`); stores them in `events.params.edges` (Granville 43, Cambie 48, viaducts 54, Burrard 8, Lions Gate 2). `sim/cli.py` passes the full edge list through; `sim/librun.py` closes every lane of every edge; `web/index.html` reds them all + a `?run=` selector. Re-verified Granville: 0 new entries after the 08:00 closure (both ways), bridge empties by 08:04. FK-detach (`runs.scenario_id → NULL`) before re-seeding scenarios. |
+| 2026-06-01 | 5 | **Phase 5 complete — closure injection + before/after; exit gate met.** Unified the run path into `sim/librun.py` (one libsumo process → geo FCD + per-approach signals + tripinfo, with optional mid-run **closure**: disallow an edge's lanes at the event time, with `--device.rerouting` so traffic redistributes). `sim run --scenario close_<bridge>`; runs register their scenario + metrics. Viewer: scenario panel with Δ avg travel / wait / trips-done vs a matched baseline + the closed edge highlighted (✕). Demo: closing Granville vacated the bridge (200→2 after 08:00), rerouted traffic, +14 s travel/wait, −96 trips. Replaced run.py + tlscapture.py with librun. Accident/speed-drop primitives + click-to-place authoring → backlog. |
 | 2026-06-01 | 4 | **Phase 4 complete — census demand; exit gate met.** `sim/demand_census.py` turns the SQLite OD (98-10-0459) + departure profiles (98-10-0458) + land-use zones into SUMO routes for a representative weekday: edge↔zone sjoin + emp/pop weights, external origins → directional bridge gateways, census AM departure curve (+ synthetic PM), car-mode-share scaling, and synthesized non-work/delivery/truck demand; duarouter assignment. `sim run --demand census`. Verified: AM departure shape matches census; full-day sim is bimodal (AM ~801 / PM ~946 active); gateway volumes east > south > Lions Gate (matches the OD). Fixed `trace._classify` for non-string vTypes. duaIterate + tls tuning → backlog. |
 | 2026-06-01 | 3 | **Signals: one indicator per approach (review).** Per-movement dots (3 per approach) read as confusing clutter. `tlscapture` now records each movement's incoming approach edge; the viewer groups movements by edge and shows a single green/yellow/red dot per approach (green if any movement is green, else yellow, else red), positioned at the approach's stop line — a normal traffic-light read. |
 | 2026-06-01 | 3 | **Signal-dot styling fix (review).** Signal markers used deck's default 1-*metre* stroke, so the ring ballooned to a solid black dot when zoomed in. Switched to a thin pixel-based white halo + radius that scales with zoom (clamped) — colour now reads clearly at street zoom. |
