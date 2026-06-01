@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 
-from etl import census, config, db, events, network, signals, transit, zoning
+from etl import calibration, census, config, db, events, network, signals, transit, zoning
 
 # Ordered: network first (the geographic spine everything else attaches to).
 STEPS = {
@@ -21,6 +21,7 @@ STEPS = {
     "transit": transit.run,
     "signals": signals.run,
     "events": events.run,
+    "calibrate": calibration.run,
 }
 
 

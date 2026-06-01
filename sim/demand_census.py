@@ -54,6 +54,26 @@ SOUTH_GW = ["gw_burrard_bridge", "gw_granville_bridge", "gw_cambie_bridge"]
 EAST_GW = ["gw_georgia_viaduct", "gw_east_arterials"]
 VANCOUVER = "5915022"
 
+# Per-gateway calibration weights (Phase 6): bias the within-group gateway choice
+# so the simulated bridge split matches observed AADT (docs/calibration/report.md).
+# 1.0 = the plain geographic default. The big correction is down-weighting the
+# Georgia/Dunsmuir viaduct: the model's "east" bucket is most of Metro Van, but
+# those commuters really fan out across surface arterials (east_arterials), not
+# the viaduct — which is in reality the *smallest* crossing (40k AADT).
+GATEWAY_WEIGHT = {
+    "gw_lions_gate": 1.58,
+    "gw_burrard_bridge": 1.15,
+    "gw_granville_bridge": 1.36,
+    "gw_cambie_bridge": 1.25,
+    "gw_georgia_viaduct": 0.25,
+    "gw_east_arterials": 1.0,
+}
+
+
+def _wchoice(group, rng):
+    """Weighted gateway pick using the calibration weights."""
+    return rng.choices(group, weights=[GATEWAY_WEIGHT.get(g, 1.0) for g in group], k=1)[0]
+
 # Peninsula shares of City-of-Vancouver totals (downtown is the job core; the
 # West End/Yaletown/downtown hold a large resident population).
 JOB_SHARE, POP_SHARE = 0.45, 0.27
@@ -261,12 +281,13 @@ def build_demand(
             if r["origin"] in SOUTH
             else EAST_GW
         )
-        for _ in range(int(round(r["count"] * JOB_SHARE * CAR_INBOUND * scale))):
-            gid = rng.choice(grp)
-            ino, j = gin(gid), sj()
-            commute(ino, j, am=True)
-            commute(j, gout(gid) or ino, am=False)
-            n_ext += 1
+        base = r["count"] * JOB_SHARE * CAR_INBOUND * scale
+        for gid in grp:  # split the origin's demand across its gateways, weighted
+            for _ in range(int(round(base / len(grp) * GATEWAY_WEIGHT.get(gid, 1.0)))):
+                ino, j = gin(gid), sj()
+                commute(ino, j, am=True)
+                commute(j, gout(gid) or ino, am=False)
+                n_ext += 1
 
     # 2. Internal Vancouver -> downtown job; entry split between on-peninsula / south / east
     n_int = 0
@@ -276,9 +297,9 @@ def build_demand(
         if u < INTERNAL_ENTRY["onpen"]:
             o = sh()
         elif u < INTERNAL_ENTRY["onpen"] + INTERNAL_ENTRY["south"]:
-            o = gin(rng.choice(SOUTH_GW))
+            o = gin(_wchoice(SOUTH_GW, rng))
         else:
-            o = gin(rng.choice(EAST_GW))
+            o = gin(_wchoice(EAST_GW, rng))
         commute(o, j, am=True)
         commute(j, o, am=False)
         n_int += 1
@@ -287,7 +308,7 @@ def build_demand(
     n_out = 0
     for _ in range(int(round((outbound["s"] or 0) * POP_SHARE * CAR_OUTBOUND * scale))):
         h = sh()
-        gid = rng.choice(["gw_lions_gate", *SOUTH_GW, *EAST_GW])
+        gid = _wchoice(["gw_lions_gate", *SOUTH_GW, *EAST_GW], rng)
         commute(h, gout(gid), am=True)
         commute(gin(gid), h, am=False)
         n_out += 1

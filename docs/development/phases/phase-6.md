@@ -2,7 +2,7 @@
 
 **Goal:** Make the model credible by calibrating against the open data we can actually obtain, and begin expanding beyond the peninsula. Calibration is a first-class goal — it is what separates a toy from a model.
 
-**Status:** Not Started.
+**Status:** Complete. **5/5 bridge screenlines within GEH < 5 (mean 1.22)** — `etl calibrate` seeds published bridge AADT as AM-peak targets, `sim calibrate` measures simulated gateway volumes and fits the demand split (per-gateway weights in `sim/demand_census.py`); coverage in `docs/calibration/report.md`. Outward regional expansion (Task 4) deferred to backlog as a post-v1 stretch goal.
 
 ## Reality check (from Phase 0 research)
 

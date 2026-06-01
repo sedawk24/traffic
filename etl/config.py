@@ -102,6 +102,11 @@ SOURCES: dict[str, dict[str, str]] = {
         "url": "https://api.open511.gov.bc.ca/events",
         "license": "OGL-BC",
     },
+    "bridge_counts_published": {
+        "name": "Published bridge AADT (calibration screenlines)",
+        "url": "https://www.th.gov.bc.ca/trafficdata/",
+        "license": "Published estimates (Wikipedia/CoV/MoTI; verify vs MoTI TRADAS)",
+    },
 }
 
 
