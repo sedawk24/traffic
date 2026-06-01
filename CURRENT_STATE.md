@@ -41,7 +41,7 @@ The full chain runs end to end and the **key gate is met** (a real SUMO run repl
 ## Phase 3 — Visualization (complete)
 
 The replay is polished and performant; the exit gate is met. The viewer (`web/index.html`, MapLibre positron + deck.gl):
-- **Per-vehicle icons** (car/bus glyphs oriented by heading, interpolated each frame) at street zoom, **coloured by congestion** (red = stopped → green = moving; toggle to colour by type). **Traffic-signal locations** appear when zoomed in.
+- **Per-vehicle icons** (car/bus glyphs oriented by heading, interpolated each frame) at street zoom, **coloured by congestion** (red = stopped → green = moving; toggle to colour by type). **Live per-approach traffic-signal states** (red/green/amber, cycling over time — captured from the run via libsumo) appear at street zoom. Bridge gateways are placed from OSM bridge-way centroids (data-grounded).
 - **Region→street LOD:** roads as **flow ribbons** coloured by per-edge traffic volume when zoomed out → individual icons at street zoom (transition ~zoom 13.2).
 - **Land-use zones** + legend (fills fade as you zoom in), roads styled by class, **labelled bridge gateways**, subtle **bus-route lines**.
 - **Controls:** run selector, speed, day-scrubber, time-of-day clock, layer toggles, `?zoom/&lng/&lat` view params.

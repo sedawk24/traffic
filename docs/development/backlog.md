@@ -23,7 +23,6 @@ Future features, ideas, and deferred work that surface during development. Items
 - **GPU engine escape hatch (MOSS)** if microscopic scale becomes the binding constraint (>2M vehicles).
 - **Better basemap styling** — bespoke MapLibre style tuned to the app's palette.
 - **Self-hosted PMTiles basemap (offline / no-cloud).** Generate a Protomaps PMTiles BC extract (needs tilemaker/planetiler or the `pmtiles` CLI — none installed) + a Protomaps MapLibre style, served via range requests. OpenFreeMap positron is the dev basemap until then (Phase 3 Task 1, deferred).
-- **Live traffic-signal state.** Render each signal's current indication (red/green/amber, ideally per approach) at street zoom — needs capturing TLS phases over time from a sim run (`--tls-state-output` or traci) + serving a per-signal timeline. Signal *locations* are already shown at street zoom.
 - **Viewer refinements.** Color-by-type ⇄ congestion toggle is in. Remaining: truck/SkyTrain icons once demand includes those modes; window-on-demand trace loading as the scrubber moves (vs full upfront); glyph-icon polish.
 - **Adaptive/coordinated signals via TraCI** beyond actuated defaults (e.g., live green-wave control).
 - **Demand calibration loop** using `routeSampler.py` against edge/turn counts.

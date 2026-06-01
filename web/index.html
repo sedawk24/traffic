@@ -66,7 +66,7 @@ const SIGNAL_COL = [250,180,44];
 const ZONE_LABELS = { 'downtown-core':'Downtown core', residential:'Residential', commercial:'Commercial',
   industrial:'Industrial', parkland:'Parkland' };
 const LOD_Z = 13.2;   // < flow ribbons | ≥ icons
-const SIG_Z = 15.3;   // ≥ : show traffic-signal locations
+const SIG_Z = 14.8;   // ≥ : show live traffic-signal states
 const css = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 const hms = sec => { const f=n=>String(Math.floor(n)).padStart(2,'0'); return `${f(sec/3600%24)}:${f(sec/60%60)}:${f(sec%60)}`; };
 const volColor = v => { const x=Math.min(1, Math.sqrt((v||0)/180));
@@ -75,6 +75,7 @@ const volColor = v => { const x=Math.min(1, Math.sqrt((v||0)/180));
 const congColor = s => { const x=Math.max(0,Math.min(1,(s||0)/11));
   return x<0.5 ? [235, Math.round(70+150*(x/0.5)), 55]
                : [Math.round(235-165*((x-0.5)/0.5)), Math.round(220-40*((x-0.5)/0.5)), Math.round(55+45*((x-0.5)/0.5))]; };
+const sigColor = c => (c==='G'||c==='g') ? [40,200,90] : (c==='y'||c==='Y') ? [245,200,40] : (c==='r'||c==='R') ? [235,60,55] : [150,150,150];
 const R=6371000, rad=Math.PI/180;
 const distM = (a,b) => { const dLat=(b[1]-a[1])*rad, dLon=(b[0]-a[0])*rad, la=a[1]*rad, lb=b[1]*rad;
   const x=Math.sin(dLat/2)**2 + Math.cos(la)*Math.cos(lb)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.min(1,Math.sqrt(x))); };
@@ -101,20 +102,23 @@ const overlay = new deck.MapboxOverlay({ interleaved:false, layers:[] });
 map.addControl(overlay);
 
 // ---- state ---------------------------------------------------------------
-let T=300, tMax=0, begin=25200, playing=true, speed=30, last=0, zoom=Z0;
-let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, signalsGeo=null, volMap={}, vehicles=0;
+let T=+Q.get('t')||300, tMax=0, begin=25200, playing=Q.get('play')!=='0', speed=30, last=0, zoom=Z0;
+let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
+let sigPos={}, sigChanges=[];
 const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
 init().catch(e => { const l=document.getElementById('loading'); if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
 
 async function loadRun(id){
-  const [meta, t, vol] = await Promise.all([
+  const [meta, t, vol, sig] = await Promise.all([
     fetch(`/api/runs/${id}/meta`).then(r=>r.json()),
     fetch(`/api/runs/${id}/trips?every=2`).then(r=>r.json()),
     fetch(`/api/runs/${id}/volumes`).then(r=>r.json()),
+    fetch(`/api/runs/${id}/signals-live`).then(r=>r.ok?r.json():{pos:{},changes:{}}).catch(()=>({pos:{},changes:{}})),
   ]);
   begin = meta.params.begin ?? 25200; tMax = meta.stats.trajectory.t_max;
   vehicles = meta.stats.trajectory.vehicles; trips = t; volMap = vol;
+  sigPos = sig.pos || {}; sigChanges = Object.entries(sig.changes || {});
   for (const tr of trips){ tr.t0=tr.timestamps[0]; tr.tN=tr.timestamps[tr.timestamps.length-1]; }
   document.getElementById('vcount').textContent = vehicles.toLocaleString();
   document.getElementById('runname').textContent = meta.params.name ?? id;
@@ -122,12 +126,11 @@ async function loadRun(id){
 }
 
 async function init(){
-  const [zones, net, transit, sig, runs] = await Promise.all([
+  const [zones, net, transit, runs] = await Promise.all([
     fetch('/api/zones').then(r=>r.json()), fetch('/api/network').then(r=>r.json()),
-    fetch('/api/transit').then(r=>r.json()), fetch('/api/signals').then(r=>r.json()),
-    fetch('/api/runs').then(r=>r.json()),
+    fetch('/api/transit').then(r=>r.json()), fetch('/api/runs').then(r=>r.json()),
   ]);
-  roads=net; transitGeo=transit; signalsGeo=sig;
+  roads=net; transitGeo=transit;
   zonesPoly = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
   gateways = zones.features.filter(f=>f.properties.is_gateway);
   const sel = document.getElementById('scenario');
@@ -167,9 +170,17 @@ function layers(){
     lineWidthUnits:'pixels', lineWidthMinPixels:0.4, updateTriggers:{getLineColor:flow, getLineWidth:flow}, parameters:{depthTest:false} }));
   if (show.transit && transitGeo) L.push(new deck.GeoJsonLayer({ id:'transit', data:transitGeo, stroked:true, filled:false,
     getLineColor:TRANSIT_COL, getLineWidth:1, lineWidthUnits:'pixels', lineWidthMinPixels:0.7, parameters:{depthTest:false} }));
-  if (show.signals && signalsGeo && zoom>=SIG_Z) L.push(new deck.ScatterplotLayer({ id:'sig', data:signalsGeo.features,
-    getPosition:f=>f.geometry.coordinates, getFillColor:SIGNAL_COL, getRadius:2.6, radiusUnits:'pixels',
-    stroked:true, getLineColor:[40,30,0], lineWidthMinPixels:0.6 }));
+  if (show.signals && zoom>=SIG_Z && sigChanges.length){
+    const pts=[];
+    for (const [tls, ch] of sigChanges){
+      let idx=-1;
+      if (ch.length && ch[0][0]<=t){ let lo=0,hi=ch.length-1; while(lo<=hi){const m=(lo+hi)>>1; if(ch[m][0]<=t){idx=m;lo=m+1;}else hi=m-1;} }
+      const st = idx>=0 ? ch[idx][1] : (ch[0]?ch[0][1]:''), ps = sigPos[tls]||[];
+      for (let i=0;i<ps.length;i++){ if(ps[i]) pts.push({position:ps[i], color:sigColor(st[i]||'r')}); }
+    }
+    L.push(new deck.ScatterplotLayer({ id:'sig', data:pts, getPosition:d=>d.position, getFillColor:d=>d.color,
+      getRadius:2.4, radiusUnits:'pixels', radiusMinPixels:2, stroked:true, getLineColor:[25,25,25], lineWidthMinPixels:0.4, updateTriggers:{getFillColor:t} }));
+  }
   if (show.trails && !flow) L.push(new deck.TripsLayer({ id:'trips', data:trips, getPath:d=>d.path, getTimestamps:d=>d.timestamps,
     getColor:d=>VCOL[d.cls]||[150,150,150], currentTime:t, trailLength:8, fadeTrail:true, widthUnits:'pixels', getWidth:1, widthMinPixels:1, opacity:0.6 }));
   let nActive=0;
@@ -204,7 +215,8 @@ function buildLegend(){
     `<h4>Vehicles (street zoom)</h4>`+
     `<div class="ramp" style="background:linear-gradient(90deg,${css(congColor(0))},${css(congColor(5.5))},${css(congColor(11))})"></div>`+
     `<div class="row" style="justify-content:space-between;color:var(--muted)"><span>stopped</span><span>moving</span></div>`+
-    `<div class="row" style="color:var(--muted);margin-top:2px">shape: ▮ car · ▬ bus · ●<span style="color:${css(SIGNAL_COL)}">●</span> signals</div>`+
+    `<div class="row" style="color:var(--muted);margin-top:2px">shape: ▮ car · ▬ bus</div>`+
+    `<div class="row" style="color:var(--muted)"><span style="color:#28c85a">●</span><span style="color:#f5c828">●</span><span style="color:#eb3c37">●</span> live signals (zoom in)</div>`+
     `<h4>Road flow (zoomed out)</h4>`+
     `<div class="ramp" style="background:linear-gradient(90deg,${css(volColor(0))},${css(volColor(60))},${css(volColor(180))})"></div>`+
     `<div class="row" style="justify-content:space-between;color:var(--muted)"><span>quiet</span><span>busy</span></div>`+

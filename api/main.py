@@ -203,6 +203,16 @@ def run_volumes(run_id: int) -> dict:
     return vol
 
 
+@app.get("/api/runs/{run_id}/signals-live")
+def signals_live(run_id: int) -> FileResponse:
+    """Per-signal stop-line positions + state-change timeline (live red/green view)."""
+    r = _run_row(run_id)
+    f = Path(r["trace_path"]).with_name("tls_states.json")
+    if not f.exists():
+        raise HTTPException(404, "no captured signal states for this run — re-run `sim run`")
+    return FileResponse(f, media_type="application/json")
+
+
 @app.get("/api/network")
 def network() -> FileResponse:
     return FileResponse(_ensure_network_geojson(), media_type=GEOJSON_MEDIA)

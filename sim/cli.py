@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 from datetime import datetime
 from importlib import metadata
 
@@ -79,6 +81,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         f"  vehicles={tstats['vehicles']:,}  peak_active={tstats['peak_active']}  "
         f"rows={tstats['rows']:,}  by_class={tstats['by_class']}"
     )
+
+    print("  capturing signal states (libsumo, separate process) ...")
+    tls_out = run_dir / "tls_states.json"
+    subprocess.run(
+        [sys.executable, "-m", "sim.tlscapture", str(net), str(routes),
+         str(args.begin), str(args.end), "0" if args.no_transit else "1", str(tls_out)],
+        check=True, cwd=config.ROOT,
+    )
+    print(f"  signal states -> {tls_out.name} ({tls_out.stat().st_size // 1024} KB)")
 
     rid = _register(args, traj, started, {**stats, "trajectory": tstats})
     size_mb = traj.stat().st_size / 1e6
