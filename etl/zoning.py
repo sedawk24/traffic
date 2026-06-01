@@ -84,6 +84,9 @@ def _clip(path: Path, cordon: Polygon) -> gpd.GeoDataFrame:
 
 def _zone(zone_id, name, land_use, geom, source, is_gateway=0, category=None) -> dict:
     rp = geom.representative_point()
+    # Missing CoV names arrive as float NaN (and `NaN or "park"` keeps NaN, since
+    # NaN is truthy); normalise to None so the exported GeoJSON is valid JSON.
+    name = None if (name is None or (isinstance(name, float) and name != name)) else str(name)
     return {
         "zone_id": zone_id,
         "name": name,

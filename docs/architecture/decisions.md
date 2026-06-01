@@ -133,3 +133,15 @@ A running log of significant architectural decisions made during this project. E
 **Alternatives considered:**
 - Plausibility-only: weaker credibility ("toy vs model").
 - Invest in commercial data now: deferred unless open data proves insufficient.
+
+---
+
+## 2026-06-01 — Batch SUMO runs via the `sumo` binary (not libsumo), to isolate Arrow
+
+**Decision:** Run the Phase-2 batch FCD dump with the `sumo` binary in a subprocess rather than the in-process `libsumo` API. Live event injection (Phase 5) still uses libsumo/traci, but FCD post-processing (pyarrow) runs in a process separate from any libsumo run.
+
+**Reasoning:** `libsumo` and `pyarrow` each bundle the Arrow C++ runtime; importing both in one process throws `ArrowKeyError: scheme 'file' already registered`. A non-interactive batch runs at the same speed via the binary (no per-step Python control is needed), so the binary cleanly sidesteps the clash. The earlier "libsumo for batch speed" decision was about avoiding per-step TraCI overhead during *interactive* control; a pure dump has none.
+
+**Alternatives considered:**
+- libsumo for the run + post-process in a child process: keeps the API literal but adds subprocess plumbing and inter-process stat passing; deferred unless in-process control is needed.
+- Import-order juggling of pyarrow vs libsumo: fragile and unreliable.

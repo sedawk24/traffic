@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Greater Vancouver Traffic Simulator — Phase 2 tracer bullet</title>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.38/dist.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0f14; font-family: system-ui, sans-serif; }
+  #map { position: absolute; inset: 0; }
+  #panel {
+    position: absolute; left: 12px; bottom: 12px; right: 12px; z-index: 5;
+    background: rgba(16,22,30,.86); color: #dfe7ef; border: 1px solid #2a3744;
+    border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 14px;
+    backdrop-filter: blur(6px);
+  }
+  #panel button { background:#1f6feb; color:#fff; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px; }
+  #panel button:hover { background:#3b82f6; }
+  #scrub { flex: 1; }
+  #clock { font-variant-numeric: tabular-nums; font-size: 18px; min-width: 92px; }
+  #stat { font-size: 12px; color: #93a4b5; min-width: 150px; }
+  select { background:#11161d; color:#dfe7ef; border:1px solid #2a3744; border-radius:6px; padding:5px; }
+  #title { position:absolute; top:12px; left:12px; z-index:5; color:#dfe7ef; background:rgba(16,22,30,.8);
+           padding:6px 12px; border-radius:8px; font-size:13px; border:1px solid #2a3744; }
+  #loading { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:6;
+             color:#dfe7ef; background:rgba(16,22,30,.9); padding:14px 20px; border-radius:8px; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="title">Downtown Vancouver peninsula · baseline run · <span id="vcount">0</span> vehicles</div>
+<div id="loading">Loading network, zones &amp; trace…</div>
+<div id="panel">
+  <button id="play">⏸ Pause</button>
+  <span id="clock">07:00:00</span>
+  <input id="scrub" type="range" min="0" max="100" value="0" />
+  <label>speed <select id="speed">
+    <option value="10">10×</option><option value="30" selected>30×</option>
+    <option value="60">60×</option><option value="120">120×</option>
+  </select></label>
+  <span id="stat">—</span>
+</div>
+
+<script type="module">
+import * as Arrow from 'https://esm.sh/apache-arrow@17';
+
+const ZCOL = {
+  'residential':[104,159,114,150], 'commercial':[74,127,196,150],
+  'industrial':[176,134,92,150], 'parkland':[88,166,96,160],
+  'downtown-core':[150,112,190,160], 'gateway':[230,90,90,210],
+};
+const speedColor = s => { const x=Math.max(0,Math.min(1,s/14));
+  return [Math.round(235-205*x), Math.round(70+150*x), 70, 235]; };
+const hms = sec => { const h=(Math.floor(sec/3600)%24).toString().padStart(2,'0');
+  const m=(Math.floor(sec/60)%60).toString().padStart(2,'0'); const s=(Math.floor(sec)%60).toString().padStart(2,'0');
+  return `${h}:${m}:${s}`; };
+
+const map = new maplibregl.Map({
+  container:'map', style:'https://tiles.openfreemap.org/styles/positron',
+  center:[-123.12, 49.288], zoom:12.4, pitch:0,
+});
+const overlay = new deck.MapboxOverlay({ interleaved:false, layers:[] });
+map.addControl(overlay);
+init().catch(e => { const l=document.getElementById('loading');
+  if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
+
+let T=300, tMax=0, begin=25200, playing=true, speed=30, last=0;
+let lon, lat, spd, frameStart, idxAll, N=0;
+
+async function init(){
+  const [zones, roads, meta, traceBuf] = await Promise.all([
+    fetch('/api/zones').then(r=>r.json()),
+    fetch('/api/network').then(r=>r.json()),
+    fetch('/api/runs/1/meta').then(r=>r.json()),
+    fetch('/api/runs/1/trace').then(r=>r.arrayBuffer()),
+  ]);
+  begin = meta.params.begin ?? 25200;
+  tMax = meta.stats.trajectory.t_max;
+  document.getElementById('vcount').textContent = meta.stats.trajectory.vehicles.toLocaleString();
+
+  const table = Arrow.tableFromIPC(new Uint8Array(traceBuf));
+  const tArr = table.getChild('t').toArray();
+  lon = table.getChild('lon').toArray();
+  lat = table.getChild('lat').toArray();
+  spd = table.getChild('speed').toArray();
+  N = table.numRows;
+  idxAll = new Int32Array(N); for (let i=0;i<N;i++) idxAll[i]=i;
+  // rows are sorted by t -> contiguous buckets. frameStart[t] = first index with tArr>=t.
+  frameStart = new Int32Array(tMax+2);
+  let idx=0; for (let t=0;t<=tMax+1;t++){ while(idx<N && tArr[idx]<t) idx++; frameStart[t]=idx; }
+
+  document.getElementById('scrub').max = tMax;
+  document.getElementById('loading').remove();
+  window._base = [
+    new deck.GeoJsonLayer({id:'zones', data:zones, filled:true, stroked:false,
+      getFillColor:f=>ZCOL[f.properties.land_use]||[120,120,120,90], pickable:false}),
+    new deck.GeoJsonLayer({id:'roads', data:roads, stroked:true, filled:false,
+      getLineColor:[120,135,150,170], lineWidthMinPixels:0.6, getLineWidth:1}),
+  ];
+  render();
+  requestAnimationFrame(tick);
+}
+
+function vehicleLayer(){
+  const t = Math.min(tMax, Math.floor(T));
+  const a = frameStart[t], b = frameStart[t+1];
+  const data = idxAll.subarray(a, b);
+  document.getElementById('stat').textContent = `${b-a} on-network · t+${t}s`;
+  return new deck.ScatterplotLayer({
+    id:'veh', data, getPosition:i=>[lon[i],lat[i]], getFillColor:i=>speedColor(spd[i]),
+    getRadius:18, radiusMinPixels:1.6, radiusMaxPixels:6, updateTriggers:{all:t},
+  });
+}
+function render(){
+  overlay.setProps({layers:[...(window._base||[]), vehicleLayer()]});
+  document.getElementById('clock').textContent = hms(begin + T);
+  document.getElementById('scrub').value = Math.floor(T);
+}
+function tick(now){
+  if (playing && last){ T += (now-last)/1000*speed; if (T>=tMax){ T=0; } render(); }
+  last = now; requestAnimationFrame(tick);
+}
+
+document.getElementById('play').onclick = e => {
+  playing=!playing; e.target.textContent = playing?'⏸ Pause':'▶ Play'; last=0;
+};
+document.getElementById('scrub').oninput = e => { T=+e.target.value; render(); };
+document.getElementById('speed').onchange = e => { speed=+e.target.value; };
+</script>
+</body>
+</html>

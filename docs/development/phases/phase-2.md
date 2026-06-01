@@ -2,7 +2,7 @@
 
 **Goal:** Prove every link in the chain — network → demand → SUMO → trace → backend → browser — with a deliberately minimal renderer. Nothing polished; everything connected.
 
-**Status:** Not Started.
+**Status:** Complete — the whole chain runs (sim → trace → FastAPI/Arrow → deck.gl viewer) and the key gate is met: a real SUMO run replays on the peninsula in the browser with moving vehicles, land-use zones, the road network, and a day-scrubber (verified by headless screenshot).
 
 ## Why a renderer is in this phase (change from the brief)
 
@@ -22,6 +22,16 @@ The brief put visualization in Phase 3. We pull a **minimal viewer into Phase 2*
 - A FastAPI endpoint streaming Arrow.
 - A browser page that replays the day on the peninsula.
 
-## Exit gate (key)
+## Exit gate (key) — met
 
-Load the URL → see Vancouver zones + roads + vehicles moving on the basemap, driven by a real SUMO run, with a scrubber that moves time. This is the project's first true milestone.
+Load the URL → see Vancouver zones + roads + vehicles moving on the basemap, driven by a real SUMO run, with a scrubber that moves time. **Met** (headless screenshot: peninsula zones, road network, ~280 moving vehicles at 07:05, live scrubber/clock). The project's first true milestone.
+
+## How to run
+
+```
+uv run python -m etl all          # data pipeline (Phase 1) -> data/traffic.db + SUMO inputs
+uv run python -m sim run          # baseline SUMO run -> data/runs/baseline/trajectory.parquet
+uv run uvicorn api.main:app       # backend + viewer at http://127.0.0.1:8000
+```
+
+Notes: the OpenFreeMap basemap renders in a real browser (it did not load under headless capture). The trace is ~32 MB at 1 Hz; `/api/runs/{id}/trace?every=N` strides it for lighter loads.
