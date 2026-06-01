@@ -1,23 +1,26 @@
-"""ETL step: OpenStreetMap -> SUMO road network for the downtown peninsula.
+"""ETL step: OpenStreetMap -> SUMO road network.
+
+Builds one of two study areas (``etl network --area peninsula|metro``):
+
+* **peninsula** (default) — the downtown Vancouver peninsula, all drivable
+  streets, trimmed to the bridge cordon. Driven microscopically.
+* **metro** — core urbanized Metro Vancouver, **major roads only**
+  (motorway…tertiary), tiled OSM download. Driven mesoscopically (Phase 7).
 
 Pipeline:
-  1. Download the peninsula OSM extract via SUMO's ``osmGet.py`` (Overpass-backed),
-     saving the raw OSM XML under ``data/osm/`` for provenance/reproducibility.
-  2. ``netconvert`` the OSM into a SUMO ``.net.xml`` with actuated signals and the
-     standard urban import options (see docs/development/phases/phase-1.md and the
-     signal-timing decision in docs/architecture/decisions.md).
-  3. Verify the result with ``sumolib`` and record provenance + network metadata
-     in SQLite.
+  1. Download the OSM extract via SUMO's ``osmGet.py`` (Overpass-backed), saving
+     the raw OSM XML under ``data/osm/`` for provenance/reproducibility.
+  2. ``netconvert`` the OSM into a SUMO ``.net.xml`` with actuated signals and
+     the standard urban import options.
+  3. Verify with ``sumolib`` and record provenance + metadata in SQLite.
 
-The manual ``netedit`` cleanup of bridges/gateways/lane-counts (Task 1) and the
-``netdiff`` capture so edits survive an OSM re-import (Task 2) follow this step.
-
-Idempotent: the cached OSM extract is reused (pass ``--refresh`` to re-download)
-and the net is overwritten deterministically from the same inputs + options.
+Idempotent: the cached OSM extract is reused (``--refresh`` re-downloads) and the
+net is overwritten deterministically from the same inputs + options.
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from datetime import date
@@ -25,43 +28,69 @@ from pathlib import Path
 
 from etl import config, db
 
-NET_NAME = "peninsula"
+
+def _area(area: str) -> dict:
+    """Per-area build parameters."""
+    if area == "metro":
+        return {
+            "name": "metro",
+            "bbox": config.METRO_BBOX,
+            "road_types": json.dumps({"highway": config.METRO_ROAD_TYPES}),
+            "tiles": 4,
+            "use_cordon": False,
+        }
+    return {
+        "name": "peninsula",
+        "bbox": config.PENINSULA_BBOX,
+        "road_types": None,
+        "tiles": 1,
+        "use_cordon": True,
+    }
 
 
-def _osm_extract_path() -> Path:
-    # osmGet.py writes "<prefix>_bbox.osm.xml" when invoked with --bbox.
-    return config.OSM_DIR / f"{NET_NAME}_bbox.osm.xml"
+def _osm_files(net_name: str) -> list[Path]:
+    """The OSM extract file(s) for an area (one for a plain bbox, N for tiles)."""
+    return sorted(config.OSM_DIR.glob(f"{net_name}_*.osm.xml")) or sorted(
+        config.OSM_DIR.glob(f"{net_name}[0-9]*.osm.xml")
+    )
 
 
-def download_osm(refresh: bool = False) -> Path:
-    """Fetch the peninsula OSM extract (cached unless ``refresh``)."""
-    out = _osm_extract_path()
-    if out.exists() and out.stat().st_size > 0 and not refresh:
-        print(f"  OSM extract cached: {out} ({out.stat().st_size:,} bytes)")
-        return out
+def download_osm(spec: dict, refresh: bool = False) -> list[Path]:
+    """Fetch an area's OSM extract via osmGet.py (cached unless ``refresh``)."""
+    name = spec["name"]
+    existing = _osm_files(name)
+    if existing and not refresh:
+        total = sum(f.stat().st_size for f in existing)
+        print(f"  OSM extract cached: {len(existing)} file(s), {total:,} bytes")
+        return existing
 
     config.OSM_DIR.mkdir(parents=True, exist_ok=True)
-    w, s, e, n = config.PENINSULA_BBOX
+    for stale in _osm_files(name):
+        stale.unlink()
+    w, s, e, n = spec["bbox"]
     osmget = config.sumo_tool("osmGet.py")
-    # `--opt=value` form so the negative-longitude leading '-' isn't parsed as a flag.
-    cmd = [sys.executable, str(osmget), f"--bbox={w},{s},{e},{n}", f"--prefix={NET_NAME}"]
+    cmd = [sys.executable, str(osmget), f"--bbox={w},{s},{e},{n}", f"--prefix={name}"]
+    if spec["road_types"]:
+        cmd.append(f"--road-types={spec['road_types']}")
+    if spec["tiles"] > 1:
+        cmd.append(f"--tiles={spec['tiles']}")
     print("  $", " ".join(cmd), f"(cwd={config.OSM_DIR})")
-    # osmGet.py writes into the working directory.
     subprocess.run(cmd, check=True, cwd=config.OSM_DIR)
-    if not out.exists() or out.stat().st_size == 0:
-        raise FileNotFoundError(f"osmGet.py did not produce {out}")
-    print(f"  downloaded: {out} ({out.stat().st_size:,} bytes)")
-    return out
+    files = _osm_files(name)
+    if not files:
+        raise FileNotFoundError(f"osmGet.py produced no OSM extract for '{name}'")
+    print(f"  downloaded: {len(files)} file(s), {sum(f.stat().st_size for f in files):,} bytes")
+    return files
 
 
-def _netconvert_args(osm_path: Path, net_path: Path) -> list[str]:
+def _netconvert_args(osm_files: list[Path], net_path: Path, spec: dict) -> list[str]:
     typemap = config.sumo_home() / "data" / "typemap"
     type_files = ",".join(
         str(typemap / t) for t in ("osmNetconvert.typ.xml", "osmNetconvertUrbanDe.typ.xml")
     )
     args = [
         "--osm-files",
-        str(osm_path),
+        ",".join(str(f) for f in osm_files),
         "--type-files",
         type_files,
         "--output-file",
@@ -105,38 +134,38 @@ def _netconvert_args(osm_path: Path, net_path: Path) -> list[str]:
         "true",
         "--output.original-names",
         "true",
-        # Plain-XML baseline so a manual netedit pass can be captured as a netdiff
-        # patch (Task 2) and survive an OSM re-import.
         "--plain-output-prefix",
-        str(net_path.with_name("peninsula.plain")),
+        str(net_path.with_name(f"{spec['name']}.plain")),
     ]
-    # Cordon trim: keep only edges inside the peninsula polygon, then the largest
-    # connected component — drops the across-water spillover (North Shore, Kits,
-    # Mount Pleasant) and the stray long ways the generous bbox pulled in.
-    if config.CORDON_POLYGON:
+    if spec["use_cordon"] and config.CORDON_POLYGON:
+        # Cordon trim: keep only edges inside the peninsula polygon, then the
+        # largest connected component.
         args += [
             "--keep-edges.in-geo-boundary",
             config.cordon_geo_boundary(),
             "--keep-edges.components",
             "1",
         ]
+    else:
+        # Metro: no cordon, but keep the largest connected component so stray
+        # disconnected fragments (islands, dead-end ramps) drop out.
+        args += ["--keep-edges.components", "1"]
     return args
 
 
-def build_net(osm_path: Path) -> tuple[Path, list[str]]:
+def build_net(osm_files: list[Path], spec: dict) -> tuple[Path, list[str]]:
     """Run netconvert; return the net path and the exact argument list used."""
     config.SUMO_DIR.mkdir(parents=True, exist_ok=True)
-    net_path = config.SUMO_DIR / f"{NET_NAME}.net.xml"
-    args = _netconvert_args(osm_path, net_path)
-    cmd = [str(config.sumo_bin("netconvert")), *args]
-    print("  $ netconvert", " ".join(args))
-    subprocess.run(cmd, check=True)
+    net_path = config.SUMO_DIR / f"{spec['name']}.net.xml"
+    args = _netconvert_args(osm_files, net_path, spec)
+    print(f"  $ netconvert (-> {net_path.name}) ...")
+    subprocess.run([str(config.sumo_bin("netconvert")), *args], check=True)
     if not net_path.exists():
         raise FileNotFoundError(f"netconvert did not produce {net_path}")
     return net_path, args
 
 
-def verify_and_record(net_path: Path, osm_path: Path, args: list[str]) -> dict[str, int]:
+def verify_and_record(net_path: Path, osm_files: list[Path], args: list[str], spec: dict) -> dict:
     """Read the net back with sumolib, then persist provenance + metadata."""
     import sumolib
 
@@ -146,14 +175,14 @@ def verify_and_record(net_path: Path, osm_path: Path, args: list[str]) -> dict[s
         "n_junctions": len(net.getNodes()),
         "n_tls": len(net.getTrafficLights()),
     }
-    w, s, e, n = config.PENINSULA_BBOX
+    w, s, e, n = spec["bbox"]
     conn = db.connect()
     db.init_db(conn)
     db.record_source(
         conn,
         "osm",
         extract_date=date.today().isoformat(),
-        notes=f"Peninsula bbox {config.PENINSULA_BBOX}; downloaded via SUMO osmGet.py (Overpass).",
+        notes=f"{spec['name']} bbox {spec['bbox']}; via SUMO osmGet.py (Overpass).",
         row_count=stats["n_edges"],
     )
     conn.execute(
@@ -169,9 +198,9 @@ def verify_and_record(net_path: Path, osm_path: Path, args: list[str]) -> dict[s
              n_tls=excluded.n_tls, netconvert_args=excluded.netconvert_args,
              created_at=excluded.created_at""",
         (
-            NET_NAME,
+            spec["name"],
             str(net_path),
-            str(osm_path),
+            ",".join(str(f) for f in osm_files),
             w,
             s,
             e,
@@ -188,12 +217,12 @@ def verify_and_record(net_path: Path, osm_path: Path, args: list[str]) -> dict[s
 
 
 def run(args) -> int:
-    """CLI entry: OSM -> peninsula.net.xml, verified and recorded."""
-    print("=== etl network: OSM -> SUMO peninsula net ===")
-    osm_path = download_osm(refresh=getattr(args, "refresh", False))
-    net_path, ncv_args = build_net(osm_path)
-    stats = verify_and_record(net_path, osm_path, ncv_args)
+    """CLI entry: OSM -> <area>.net.xml, verified and recorded."""
+    spec = _area(getattr(args, "area", "peninsula"))
+    print(f"=== etl network: OSM -> SUMO {spec['name']} net ===")
+    osm_files = download_osm(spec, refresh=getattr(args, "refresh", False))
+    net_path, ncv_args = build_net(osm_files, spec)
+    stats = verify_and_record(net_path, osm_files, ncv_args, spec)
     print(f"  net: {net_path}")
     print(f"  edges={stats['n_edges']}  junctions={stats['n_junctions']}  tls={stats['n_tls']}")
-    print("  next (manual): netedit cleanup of bridges/gateways/lanes, then netdiff (Task 2).")
     return 0

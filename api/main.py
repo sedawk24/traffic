@@ -29,12 +29,12 @@ def _run_row(run_id: int) -> dict:
     return dict(row)
 
 
-def _ensure_network_geojson() -> Path:
+def _ensure_network_geojson(net_name: str = "peninsula") -> Path:
     """Convert the SUMO net edges to a (cached) GeoJSON of lon/lat LineStrings."""
-    net_file = config.SUMO_DIR / "peninsula.net.xml"
-    out = config.SUMO_DIR / "peninsula_edges.geojson"
+    net_file = config.SUMO_DIR / f"{net_name}.net.xml"
+    out = config.SUMO_DIR / f"{net_name}_edges.geojson"
     if not net_file.exists():
-        raise HTTPException(404, "peninsula.net.xml missing — run `etl network`")
+        raise HTTPException(404, f"{net_name}.net.xml missing — run `etl network --area {net_name}`")
     if out.exists() and out.stat().st_mtime >= net_file.stat().st_mtime:
         return out
 
@@ -183,6 +183,23 @@ def run_trips(run_id: int, every: int = Query(3, ge=1, description="sample every
     return Response(json.dumps(trips), media_type="application/json")
 
 
+def _volumes_from_routes(rou: Path) -> dict:
+    """Per-edge vehicle count from a duarouter route file (the meso path, where the
+    FCD carries no lane). Counts each vehicle once per edge it traverses."""
+    if not rou.exists():
+        return {}
+    import xml.etree.ElementTree as ET
+    from collections import Counter
+
+    c: Counter = Counter()
+    for _ev, el in ET.iterparse(str(rou), events=("end",)):
+        if el.tag == "route":
+            for e in {x for x in (el.get("edges") or "").split() if not x.startswith(":")}:
+                c[e] += 1
+            el.clear()
+    return dict(c)
+
+
 @app.get("/api/runs/{run_id}/volumes")
 def run_volumes(run_id: int) -> dict:
     """Per-edge traffic volume (distinct vehicles) over the run, for flow ribbons."""
@@ -192,13 +209,18 @@ def run_volumes(run_id: int) -> dict:
 
     r = _run_row(run_id)
     fcd = Path(r["trace_path"]).with_name("fcd.parquet")
-    if not fcd.exists():
-        raise HTTPException(404, "fcd parquet missing for this run")
-    df = pd.read_parquet(fcd, columns=["vehicle_id", "vehicle_lane"])
-    lane = df["vehicle_lane"]
-    df = df[lane.notna() & ~lane.str.startswith(":")]
-    df["edge"] = df["vehicle_lane"].str.rsplit("_", n=1).str[0]
-    vol = df.groupby("edge")["vehicle_id"].nunique().astype(int).to_dict()
+    vol: dict = {}
+    if fcd.exists():
+        df = pd.read_parquet(fcd, columns=["vehicle_id", "vehicle_lane"])
+        lane = df["vehicle_lane"]
+        df = df[lane.notna() & ~lane.str.startswith(":")]
+        if len(df):
+            df["edge"] = df["vehicle_lane"].str.rsplit("_", n=1).str[0]
+            vol = df.groupby("edge")["vehicle_id"].nunique().astype(int).to_dict()
+    if not vol:  # mesoscopic FCD has no lane attribute — count from the route file
+        vol = _volumes_from_routes(Path(r["trace_path"]).with_name("routes.rou.xml"))
+    if not vol:
+        raise HTTPException(404, "no volume data for this run")
     _VOL_CACHE[run_id] = vol
     return vol
 
@@ -214,8 +236,9 @@ def signals_live(run_id: int) -> FileResponse:
 
 
 @app.get("/api/network")
-def network() -> FileResponse:
-    return FileResponse(_ensure_network_geojson(), media_type=GEOJSON_MEDIA)
+def network(net: str = "peninsula") -> FileResponse:
+    name = net if net in ("peninsula", "metro") else "peninsula"
+    return FileResponse(_ensure_network_geojson(name), media_type=GEOJSON_MEDIA)
 
 
 @app.get("/api/transit")

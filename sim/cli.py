@@ -21,7 +21,7 @@ from importlib import metadata
 from pathlib import Path
 
 from etl import config, db
-from sim import demand, demand_census, trace
+from sim import demand, demand_census, demand_metro, trace
 
 
 def _sumo_version() -> str:
@@ -83,6 +83,7 @@ def _register(args, traj_path, started_at, stats, scenario_name, closure) -> int
     params = {
         "name": args.name,
         "demand": args.demand,
+        "area": "metro" if args.demand == "metro" else "peninsula",
         "scale": args.scale,
         "scenario": scenario_name,
         "begin": args.begin,
@@ -108,9 +109,11 @@ def _register(args, traj_path, started_at, stats, scenario_name, closure) -> int
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    net = config.SUMO_DIR / "peninsula.net.xml"
+    meso = args.demand == "metro"
+    net_name = "metro" if meso else "peninsula"
+    net = config.SUMO_DIR / f"{net_name}.net.xml"
     if not net.exists():
-        raise SystemExit("peninsula.net.xml not found — run `uv run python -m etl network` first.")
+        raise SystemExit(f"{net_name}.net.xml not found — run `etl network --area {net_name}` first.")
 
     run_dir = config.DATA_DIR / "runs" / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -128,7 +131,11 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     print(f"=== sim run '{args.name}'  [{args.begin}..{args.end}s]  scenario={scenario_name} ===")
     started = datetime.now().isoformat(timespec="seconds")
-    if args.demand == "census":
+    if args.demand == "metro":
+        demand_metro.build_demand(
+            routes, scale=args.scale, seed=args.seed, refresh=args.refresh_demand
+        )
+    elif args.demand == "census":
         demand_census.build_demand(
             routes, scale=args.scale, seed=args.seed, refresh=args.refresh_demand
         )
@@ -155,13 +162,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             str(routes),
             str(args.begin),
             str(args.end),
-            "0" if args.no_transit else "1",
+            "0" if (args.no_transit or meso) else "1",
             str(fcd),
             str(tls_out),
             str(tripinfo),
             closure[0],
             str(closure[1]),
             str(closure[2]),
+            "1" if meso else "0",
         ],
         check=True,
         cwd=config.ROOT,
@@ -191,9 +199,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--name", default="baseline", help="run name (-> data/runs/<name>/)")
     r.add_argument(
         "--demand",
-        choices=["random", "census"],
+        choices=["random", "census", "metro"],
         default="random",
-        help="demand model: random (placeholder) or census (Phase-4 census-driven)",
+        help="demand model: random, census (peninsula micro), or metro (region-wide meso)",
     )
     r.add_argument("--scale", type=float, default=0.12, help="census demand sub-sampling factor")
     r.add_argument(

@@ -44,10 +44,17 @@ uv run python -m sim calibrate --run am_base   # -> docs/calibration/report.md
 # 4. Serve and view in the browser
 uv run uvicorn api.main:app                    # http://127.0.0.1:8000
 # open http://127.0.0.1:8000/  (add ?run=<id> to load a specific run)
+
+# Metro-wide (Phase 7): a mesoscopic Greater Vancouver run
+uv run python -m etl network --area metro      # major-road regional net
+uv run python -m sim run --demand metro --name metro_am --scale 0.15 \
+      --begin 25200 --end 32400                # ~27k vehicles, mesoscopic
+# select the metro run in the viewer (it switches to a regional flow view)
 ```
 
-All six build phases (0–6) are complete; the calibrated peninsula vertical
-slice runs end to end. See `docs/development/` for phase plans and the change log.
+All six build phases (0–6) are complete (the calibrated peninsula vertical slice
+runs end to end); Phase 7 adds a mesoscopic metro-wide region. See
+`docs/development/` for phase plans and the change log.
 
 ## Documentation
 
