@@ -213,6 +213,28 @@ def transit() -> FileResponse:
     return FileResponse(_ensure_transit_geojson(), media_type=GEOJSON_MEDIA)
 
 
+@app.get("/api/signals")
+def signals() -> Response:
+    """City of Vancouver traffic-signal locations (shown at street zoom)."""
+    conn = db.connect()
+    rows = conn.execute(
+        "SELECT signal_id, lon, lat, sumo_tls_id FROM signals WHERE source = 'cov_signals'"
+    ).fetchall()
+    conn.close()
+    features = [
+        {
+            "type": "Feature",
+            "properties": {"id": r["signal_id"], "tls": r["sumo_tls_id"]},
+            "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]},
+        }
+        for r in rows
+        if r["lon"] is not None
+    ]
+    return Response(
+        json.dumps({"type": "FeatureCollection", "features": features}), media_type=GEOJSON_MEDIA
+    )
+
+
 @app.get("/api/zones")
 def zones() -> FileResponse:
     z = config.ZONES_DIR / "zones.geojson"

@@ -14,14 +14,13 @@
   .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; backdrop-filter:blur(8px); }
   #title { position:absolute; top:12px; left:12px; z-index:5; padding:8px 13px; font-size:13px; }
   #title b { font-size:14px; } #title .sub { color:var(--muted); }
-  #legend { position:absolute; top:12px; right:12px; z-index:5; padding:10px 13px; font-size:12px; max-width:220px; }
+  #legend { position:absolute; top:12px; right:12px; z-index:5; padding:10px 13px; font-size:12px; max-width:222px; }
   #legend h4 { margin:2px 0 6px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
   #legend .row { display:flex; align-items:center; gap:7px; margin:3px 0; }
   #legend .row + h4 { margin-top:10px; }
   .sw { width:13px; height:13px; border-radius:3px; flex:none; }
   .swl { width:16px; height:3px; border-radius:2px; flex:none; }
-  #ramp { height:9px; border-radius:3px; margin:4px 0 2px;
-          background:linear-gradient(90deg,rgb(60,160,200),rgb(150,120,120),rgb(230,60,50)); }
+  .ramp { height:9px; border-radius:3px; margin:4px 0 2px; }
   #panel { position:absolute; left:12px; right:12px; bottom:12px; z-index:5; padding:10px 14px;
            display:flex; align-items:center; gap:14px; }
   #panel button { background:#1f6feb; color:#fff; border:0; border-radius:6px; padding:7px 13px; cursor:pointer; font-size:14px; }
@@ -63,29 +62,35 @@ const ZCOL = { residential:[122,176,134,70], commercial:[86,150,210,70], industr
 const RCOL = { arterial:[64,76,92,230], collector:[110,124,140,170], local:[168,180,194,120] };
 const RW   = { arterial:2.2, collector:1.1, local:0.5 };
 const TRANSIT_COL = [188,120,52,95];
+const SIGNAL_COL = [250,180,44];
 const ZONE_LABELS = { 'downtown-core':'Downtown core', residential:'Residential', commercial:'Commercial',
   industrial:'Industrial', parkland:'Parkland' };
-const LOD_Z = 13.2;                                  // < : flow ribbons | ≥ : individual icons
+const LOD_Z = 13.2;   // < flow ribbons | ≥ icons
+const SIG_Z = 15.3;   // ≥ : show traffic-signal locations
 const css = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 const hms = sec => { const f=n=>String(Math.floor(n)).padStart(2,'0'); return `${f(sec/3600%24)}:${f(sec/60%60)}:${f(sec%60)}`; };
 const volColor = v => { const x=Math.min(1, Math.sqrt((v||0)/180));
   return [Math.round(60+170*x), Math.round(160-110*x), Math.round(200-150*x), 215]; };
+// congestion: stopped (red) -> moving (green); s in m/s
+const congColor = s => { const x=Math.max(0,Math.min(1,(s||0)/11));
+  return x<0.5 ? [235, Math.round(70+150*(x/0.5)), 55]
+               : [Math.round(235-165*((x-0.5)/0.5)), Math.round(220-40*((x-0.5)/0.5)), Math.round(55+45*((x-0.5)/0.5))]; };
+const R=6371000, rad=Math.PI/180;
+const distM = (a,b) => { const dLat=(b[1]-a[1])*rad, dLon=(b[0]-a[0])*rad, la=a[1]*rad, lb=b[1]*rad;
+  const x=Math.sin(dLat/2)**2 + Math.cos(la)*Math.cos(lb)*Math.sin(dLon/2)**2; return 2*R*Math.asin(Math.min(1,Math.sqrt(x))); };
 
-// ---- vehicle icon atlas (drawn on a canvas; tinted per type via mask) -----
+// ---- vehicle icon atlas (drawn on a canvas; tinted via mask) --------------
 const CELL = 64;
 function buildAtlas(){
-  const cv=document.createElement('canvas'); cv.width=CELL*2; cv.height=CELL;
-  const g=cv.getContext('2d'); g.fillStyle='#fff';
-  g.beginPath(); g.roundRect(CELL/2-9, CELL/2-15, 18, 30, 6); g.fill();
-  g.beginPath(); g.moveTo(CELL/2-6,CELL/2-13); g.lineTo(CELL/2+6,CELL/2-13); g.lineTo(CELL/2,CELL/2-21); g.closePath(); g.fill();
-  g.beginPath(); g.roundRect(CELL+CELL/2-9, CELL/2-21, 18, 42, 4); g.fill();
+  const cv=document.createElement('canvas'); cv.width=CELL*2; cv.height=CELL; const g=cv.getContext('2d'); g.fillStyle='#fff';
+  g.beginPath(); g.roundRect(CELL/2-10, CELL/2-16, 20, 32, 6); g.fill();
+  g.beginPath(); g.moveTo(CELL/2-7,CELL/2-14); g.lineTo(CELL/2+7,CELL/2-14); g.lineTo(CELL/2,CELL/2-23); g.closePath(); g.fill();
+  g.beginPath(); g.roundRect(CELL+CELL/2-10, CELL/2-23, 20, 46, 4); g.fill();
   return cv.toDataURL();
 }
 const ATLAS_URL = buildAtlas();
-const ATLAS_MAP = {
-  car:{x:0,y:0,width:CELL,height:CELL,anchorX:CELL/2,anchorY:CELL/2,mask:true},
-  bus:{x:CELL,y:0,width:CELL,height:CELL,anchorX:CELL/2,anchorY:CELL/2,mask:true},
-};
+const ATLAS_MAP = { car:{x:0,y:0,width:CELL,height:CELL,anchorX:CELL/2,anchorY:CELL/2,mask:true},
+  bus:{x:CELL,y:0,width:CELL,height:CELL,anchorX:CELL/2,anchorY:CELL/2,mask:true} };
 
 // ---- map -----------------------------------------------------------------
 const Q = new URLSearchParams(location.search);
@@ -97,11 +102,10 @@ map.addControl(overlay);
 
 // ---- state ---------------------------------------------------------------
 let T=300, tMax=0, begin=25200, playing=true, speed=30, last=0, zoom=Z0;
-let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
-const show = { zones:true, roads:true, transit:true, vehicles:true, trails:false, labels:true };
+let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, signalsGeo=null, volMap={}, vehicles=0;
+const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
-init().catch(e => { const l=document.getElementById('loading');
-  if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
+init().catch(e => { const l=document.getElementById('loading'); if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
 
 async function loadRun(id){
   const [meta, t, vol] = await Promise.all([
@@ -118,11 +122,12 @@ async function loadRun(id){
 }
 
 async function init(){
-  const [zones, net, transit, runs] = await Promise.all([
+  const [zones, net, transit, sig, runs] = await Promise.all([
     fetch('/api/zones').then(r=>r.json()), fetch('/api/network').then(r=>r.json()),
-    fetch('/api/transit').then(r=>r.json()), fetch('/api/runs').then(r=>r.json()),
+    fetch('/api/transit').then(r=>r.json()), fetch('/api/signals').then(r=>r.json()),
+    fetch('/api/runs').then(r=>r.json()),
   ]);
-  roads = net; transitGeo = transit;
+  roads=net; transitGeo=transit; signalsGeo=sig;
   zonesPoly = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
   gateways = zones.features.filter(f=>f.properties.is_gateway);
   const sel = document.getElementById('scenario');
@@ -134,76 +139,75 @@ async function init(){
   render(); requestAnimationFrame(tick);
 }
 
-// ---- per-frame interpolation of each active vehicle ----------------------
+// ---- interpolate each active vehicle (position, heading, speed) ----------
 function interpAt(t){
   const out=[];
   for (const tr of trips){
     if (t<tr.t0 || t>tr.tN) continue;
     const ts=tr.timestamps, n=ts.length; let lo=0, hi=n-1;
     while (lo+1<hi){ const m=(lo+hi)>>1; if (ts[m]<=t) lo=m; else hi=m; }
-    const a=tr.path[lo], b=tr.path[Math.min(lo+1,n-1)];
-    const span=(ts[lo+1]-ts[lo])||1, f=Math.max(0,Math.min(1,(t-ts[lo])/span));
+    const a=tr.path[lo], b=tr.path[Math.min(lo+1,n-1)], dt=(ts[lo+1]-ts[lo])||1;
+    const f=Math.max(0,Math.min(1,(t-ts[lo])/dt));
     const lon=a[0]+(b[0]-a[0])*f, lat=a[1]+(b[1]-a[1])*f;
-    const dE=(b[0]-a[0])*Math.cos(lat*Math.PI/180), dN=b[1]-a[1];
-    out.push({ position:[lon,lat], angle:-((dE||dN)?Math.atan2(dE,dN)*180/Math.PI:0), cls:tr.cls });
+    const dE=(b[0]-a[0])*Math.cos(lat*rad), dN=b[1]-a[1];
+    out.push({ position:[lon,lat], angle:-((dE||dN)?Math.atan2(dE,dN)/rad:0), cls:tr.cls, speed:distM(a,b)/dt });
   }
   return out;
 }
 
 // ---- layers --------------------------------------------------------------
 function layers(){
-  const t = Math.min(tMax,T), flow = zoom < LOD_Z, L = [];
-  if (show.zones){
-    const op = zoom>=15 ? 0.32 : zoom>=13.5 ? 0.6 : 1.0;
+  const t=Math.min(tMax,T), flow=zoom<LOD_Z, L=[];
+  if (show.zones){ const op = zoom>=15 ? 0.32 : zoom>=13.5 ? 0.6 : 1.0;
     L.push(new deck.GeoJsonLayer({ id:'zones', data:zonesPoly, filled:true, stroked:false, opacity:op,
-      getFillColor:f=>ZCOL[f.properties.land_use]||[130,130,130,55], parameters:{depthTest:false} }));
-  }
+      getFillColor:f=>ZCOL[f.properties.land_use]||[130,130,130,55], parameters:{depthTest:false} })); }
   if (show.roads) L.push(new deck.GeoJsonLayer({ id:'roads', data:roads, stroked:true, filled:false,
     getLineColor: flow ? f=>volColor(volMap[f.properties.id]) : f=>RCOL[f.properties.class]||RCOL.local,
-    getLineWidth: flow ? f=>0.6+3.4*Math.min(1,(volMap[f.properties.id]||0)/120)
-                       : f=>(RW[f.properties.class]||0.5)*(zoom<12?0.6:1),
-    lineWidthUnits:'pixels', lineWidthMinPixels:0.4, updateTriggers:{getLineColor:flow, getLineWidth:flow},
-    parameters:{depthTest:false} }));
-  if (show.transit && transitGeo) L.push(new deck.GeoJsonLayer({ id:'transit', data:transitGeo, stroked:true,
-    filled:false, getLineColor:TRANSIT_COL, getLineWidth:1, lineWidthUnits:'pixels', lineWidthMinPixels:0.7,
-    parameters:{depthTest:false} }));
-  if (show.trails && !flow) L.push(new deck.TripsLayer({ id:'trips', data:trips, getPath:d=>d.path,
-    getTimestamps:d=>d.timestamps, getColor:d=>VCOL[d.cls]||[150,150,150], currentTime:t, trailLength:8,
-    fadeTrail:true, widthUnits:'pixels', getWidth:1, widthMinPixels:1, opacity:0.6 }));
-  let nActive = 0;
+    getLineWidth: flow ? f=>0.6+3.4*Math.min(1,(volMap[f.properties.id]||0)/120) : f=>(RW[f.properties.class]||0.5)*(zoom<12?0.6:1),
+    lineWidthUnits:'pixels', lineWidthMinPixels:0.4, updateTriggers:{getLineColor:flow, getLineWidth:flow}, parameters:{depthTest:false} }));
+  if (show.transit && transitGeo) L.push(new deck.GeoJsonLayer({ id:'transit', data:transitGeo, stroked:true, filled:false,
+    getLineColor:TRANSIT_COL, getLineWidth:1, lineWidthUnits:'pixels', lineWidthMinPixels:0.7, parameters:{depthTest:false} }));
+  if (show.signals && signalsGeo && zoom>=SIG_Z) L.push(new deck.ScatterplotLayer({ id:'sig', data:signalsGeo.features,
+    getPosition:f=>f.geometry.coordinates, getFillColor:SIGNAL_COL, getRadius:2.6, radiusUnits:'pixels',
+    stroked:true, getLineColor:[40,30,0], lineWidthMinPixels:0.6 }));
+  if (show.trails && !flow) L.push(new deck.TripsLayer({ id:'trips', data:trips, getPath:d=>d.path, getTimestamps:d=>d.timestamps,
+    getColor:d=>VCOL[d.cls]||[150,150,150], currentTime:t, trailLength:8, fadeTrail:true, widthUnits:'pixels', getWidth:1, widthMinPixels:1, opacity:0.6 }));
+  let nActive=0;
   if (show.vehicles && !flow){
-    const data = interpAt(t); nActive = data.length;
+    const data=interpAt(t); nActive=data.length;
     L.push(new deck.IconLayer({ id:'veh', data, iconAtlas:ATLAS_URL, iconMapping:ATLAS_MAP, billboard:false,
-      getIcon:d=>d.cls==='bus'?'bus':'car', getPosition:d=>d.position, getColor:d=>VCOL[d.cls]||[120,120,120],
-      getAngle:d=>d.angle, getSize:d=>d.cls==='bus'?20:13, sizeUnits:'pixels', sizeMinPixels:5,
-      alphaCutoff:0.05, parameters:{depthTest:false} }));
+      getIcon:d=>d.cls==='bus'?'bus':'car', getPosition:d=>d.position,
+      getColor:d=> show.congestion ? congColor(d.speed) : (VCOL[d.cls]||[120,120,120]),
+      getAngle:d=>d.angle, getSize:d=>d.cls==='bus'?24:15, sizeUnits:'pixels', sizeMinPixels:6,
+      alphaCutoff:0.05, updateTriggers:{getColor:show.congestion}, parameters:{depthTest:false} }));
   }
   if (show.labels){
     L.push(new deck.ScatterplotLayer({ id:'gw', data:gateways, getPosition:f=>f.geometry.coordinates,
       getFillColor:[226,86,86], getRadius:5, radiusUnits:'pixels', stroked:true, getLineColor:[255,255,255], lineWidthMinPixels:1.5 }));
-    L.push(new deck.TextLayer({ id:'gwl', data:gateways, getPosition:f=>f.geometry.coordinates,
-      getText:f=>f.properties.name||'', getSize:11, getColor:[40,46,54], getPixelOffset:[0,-12],
-      background:true, getBackgroundColor:[255,255,255,205], backgroundPadding:[4,2], fontWeight:600 }));
+    L.push(new deck.TextLayer({ id:'gwl', data:gateways, getPosition:f=>f.geometry.coordinates, getText:f=>f.properties.name||'',
+      getSize:11, getColor:[40,46,54], getPixelOffset:[0,-12], background:true, getBackgroundColor:[255,255,255,205], backgroundPadding:[4,2], fontWeight:600 }));
   }
-  document.getElementById('stat').textContent = flow
-    ? 'flow view · busier = redder · zoom in for vehicles' : `${nActive} on-road · t+${Math.floor(T)}s`;
+  document.getElementById('stat').textContent = flow ? 'flow view · busier = redder · zoom in for vehicles'
+    : `${nActive} on-road · t+${Math.floor(T)}s`;
   return L;
 }
-function render(){
-  overlay.setProps({ layers: layers() });
+function render(){ overlay.setProps({ layers: layers() });
   document.getElementById('clock').textContent = hms(begin + T);
-  document.getElementById('scrub').value = Math.floor(T);
-}
+  document.getElementById('scrub').value = Math.floor(T); }
 function tick(now){ if (playing && last){ T += (now-last)/1000*speed; if (T>=tMax) T=0; render(); } last=now; requestAnimationFrame(tick); }
 map.on('zoom', () => { zoom = map.getZoom(); if (!playing) render(); });
 
 // ---- legend + toggles ----------------------------------------------------
 function buildLegend(){
-  const veh = [['car','Car'],['bus','Bus']].map(([k,l])=>`<div class="row"><span class="sw" style="background:${css(VCOL[k])}"></span>${l}</div>`).join('');
   const zon = Object.keys(ZONE_LABELS).map(k=>`<div class="row"><span class="sw" style="background:${css(ZCOL[k])}"></span>${ZONE_LABELS[k]}</div>`).join('');
   document.getElementById('legend').innerHTML =
-    `<h4>Vehicles (street zoom)</h4>${veh}`+
-    `<h4>Road flow (zoomed out)</h4><div id="ramp"></div><div class="row" style="justify-content:space-between;color:var(--muted)"><span>quiet</span><span>busy</span></div>`+
+    `<h4>Vehicles (street zoom)</h4>`+
+    `<div class="ramp" style="background:linear-gradient(90deg,${css(congColor(0))},${css(congColor(5.5))},${css(congColor(11))})"></div>`+
+    `<div class="row" style="justify-content:space-between;color:var(--muted)"><span>stopped</span><span>moving</span></div>`+
+    `<div class="row" style="color:var(--muted);margin-top:2px">shape: ▮ car · ▬ bus · ●<span style="color:${css(SIGNAL_COL)}">●</span> signals</div>`+
+    `<h4>Road flow (zoomed out)</h4>`+
+    `<div class="ramp" style="background:linear-gradient(90deg,${css(volColor(0))},${css(volColor(60))},${css(volColor(180))})"></div>`+
+    `<div class="row" style="justify-content:space-between;color:var(--muted)"><span>quiet</span><span>busy</span></div>`+
     `<h4>Land use</h4>${zon}`+
     `<div class="row" style="margin-top:8px"><span class="swl" style="background:${css(TRANSIT_COL)}"></span>bus routes</div>`+
     `<div class="row"><span style="color:#e25656">●</span> bridge gateways</div>`;
