@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 5 (scenarios) complete — mid-run bridge-closure injection with rerouting + before/after deltas in the UI. Phase 6 (scale & calibrate) is next.**
+**Status: Phase 6 (scale & calibrate) complete — simulated AM-peak bridge volumes match published counts at GEH < 5 across all five cordon screenlines. This was the final planned phase; the v1 vertical slice is feature-complete.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -63,16 +63,24 @@ Deferred: self-hosted PMTiles basemap (offline/no-cloud) → backlog (no tooling
 
 A closure targets the **full structure, not one edge.** `etl events` now derives each bridge's complete drivable edge set (both directions + ramps) by buffering the named OSM bridge ways and intersecting the SUMO net — e.g. Granville = **43 edges** (was 1), Cambie 48, Georgia/Dunsmuir 54, Burrard 8, Lions Gate 2. `librun` closes every lane of every edge; the viewer reds them all **only within the closure window** — before the event the bridge renders normally and the scenario panel reads "closes 08:00" (amber), flipping to "✕ closed" (red) at the event time — so it's never shown closed before it actually is. Verified on Granville closing at 08:00 (07:00–09:00 AM run, scale 0.18): the bridge carried 22,895 vehicle-frames while open, **0 new entries after the closure** (both directions), the 3 vehicles mid-span cleared by 08:04, then the deck stayed empty; network impact −174 trips / +8 s travel / +6 s wait vs the matched baseline (modest — Burrard & Cambie absorb the rerouted demand). This fixed a bug where closing a bridge barred only one edge/direction, leaving the opposite direction and other segments open.
 
+## Phase 6 — Scale & calibrate (complete)
+
+The model is now credible against real counts. The peninsula is cordoned at its bridges, so the bridge crossings are the natural calibration **screenlines**:
+- **`etl calibrate`** seeds `calibration_targets` from published bridge AADT (Lions Gate 55,596 / Granville 65,000 / Cambie ~55,000 / Burrard ~50,000 / Georgia+Dunsmuir viaducts ~40,000), converted to AM-peak-hour two-way via a K-factor; confidence is tagged per source (the obtainable subset — CoV counts are VanMap-gated, MoTI's have no bulk API).
+- **`sim calibrate --run <name>`** counts the AM-peak two-way volume the sim puts across each gateway (clean cordon-entry screenlines, read from the run's FCD), fits a global demand scale, computes **GEH** per screenline, writes `calibration_results`, and emits `docs/calibration/report.md`.
+- **Result: 5/5 screenlines within GEH < 5 (mean GEH 1.22).** Calibration exposed the Phase-4 model over-routing the east viaduct and starving Lions Gate; fixed with **per-gateway demand weights** in `sim/demand_census.py` (scale-invariant split correction). Observed volumes correspond to a full-demand scale ~3.24 (≈18× the replay sub-sample) — full-real-demand microsim exceeds SUMO's single-core ceiling (the core constraint), so replay sub-samples while the split holds at any scale.
+- **Coverage (honest):** the five bridge gateways are calibrated; the diffuse East gateways, all internal links, and travel times (RTDS retired) are not. Low-confidence targets (Cambie, Burrard) are estimates pending verified MoTI/CoV counts.
+
 ## What Is In Progress
 
-Nothing actively in progress — Phase 5 is complete (exit gate met). Ready to begin **Phase 6 (scale & calibrate)**: best-effort quantitative calibration against obtainable counts, and expanding outward from the peninsula.
+Nothing actively in progress — Phase 6 is complete (exit gate met) and it was the **final planned phase**. The v1 vertical slice (data pipeline → census demand → SUMO run + scenarios → calibrated → browser replay) is feature-complete end to end.
 
 ## What Is Next
 
-- **Phase 6 — Scale & calibrate (next).** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.
-- **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
-- **Phase 5 — Scenarios.** Accident/closure injection via TraCI; before/after impact in the UI.
-- **Phase 6 — Scale & calibrate.** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.
+All six build phases (0–6) are complete. Remaining work is **post-v1 expansion**, tracked in `docs/development/backlog.md`:
+- **Region-wide coverage (stretch).** Expand from the peninsula to full Metro Vancouver — mesoscopic region + microscopic focus areas with LOD switching.
+- **Stronger calibration.** Replace estimated Cambie/Burrard AADT with verified MoTI TRADAS / CoV station counts; add `routeSampler.py` demand fitting and corridor travel-time checks; per-link (not just screenline) coverage.
+- **Live data + richer scenarios.** GTFS-Realtime / DriveBC as live feeds; click-to-place accidents/closures; weather/event scenarios.
 
 ## Key References
 
@@ -85,4 +93,4 @@ Nothing actively in progress — Phase 5 is complete (exit gate met). Ready to b
 
 ---
 
-*Last updated: 2026-06-01*
+*Last updated: 2026-06-01 (Phase 6 — calibration)*

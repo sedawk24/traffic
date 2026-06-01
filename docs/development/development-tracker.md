@@ -14,13 +14,13 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 3 | Visualization (clean cartographic + icons) | Complete |
 | 4 | Demand modeling (realistic) | Complete |
 | 5 | Scenarios (accident / closure injection) | Complete |
-| 6 | Scale & calibrate (best-effort quantitative) | Not Started |
+| 6 | Scale & calibrate (best-effort quantitative) | Complete |
 
 **v1 north star:** a polished, fully-working vertical slice on the **downtown Vancouver peninsula** (cordoned at the bridges). Region-wide coverage is a later expansion, not a v1 gate.
 
 ---
 
-## Phase 0: Research writeup + environment spike (In Progress)
+## Phase 0: Research writeup + environment spike (Complete)
 
 ### Tasks
 
@@ -153,23 +153,23 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 6: Scale & calibrate (Not Started)
+## Phase 6: Scale & calibrate (Complete)
 
 ### Tasks
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | Calibration-data spike: MoTI bridge/highway counts, scrape CoV stations | Not Started | Honest about gaps |
-| 2 | Calibrate demand/signals toward GEH < 5 on obtainable subset | Not Started | + corridor travel-time checks |
-| 3 | Document calibration coverage | Not Started | calibration_results |
-| 4 | Expand outward (meso region + micro focus) | Not Started | Stretch goal |
+| 1 | Calibration-data spike: MoTI bridge/highway counts, scrape CoV stations | Done | `etl calibrate` seeds published bridge AADT (Lions Gate 55,596 / Granville 65,000 / Cambie ~55k / Burrard ~50k / viaducts ~40k) → `calibration_targets`, confidence-tagged; web-sourced (Wikipedia/CoV/MoTI). CoV/MoTI bulk feeds unobtainable (Phase 0 §7) → estimates flagged, verification → backlog |
+| 2 | Calibrate demand/signals toward GEH < 5 on obtainable subset | Done | `sim calibrate` fits a global demand scale + GEH per screenline; the residual route-split imbalance (east viaduct over-fed, Lions Gate starved) fixed with per-gateway demand weights in `sim/demand_census.py`. **5/5 screenlines GEH < 5, mean 1.22** |
+| 3 | Document calibration coverage | Done | `docs/calibration/report.md` (auto-generated): per-screenline GEH, gateway weights, demand-scale relationship, honest calibrated/uncalibrated coverage. `calibration_results` written to DB |
+| 4 | Expand outward (meso region + micro focus) | Deferred | Stretch goal (not a v1 gate) → backlog "Region-wide coverage" |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Simulated vs observed counts (GEH<5 on obtainable subset) | Pending | |
-| Calibration coverage documented honestly | Pending | |
+| Simulated vs observed counts (GEH<5 on obtainable subset) | Done | 5/5 bridge screenlines within GEH<5 (Georgia 0.00, Granville 0.47, Cambie 0.51, Burrard 1.35, Lions Gate 3.77); mean GEH 1.22 |
+| Calibration coverage documented honestly | Done | `docs/calibration/report.md` states the obtainable subset, low-confidence estimates, and uncalibrated links/travel-times explicitly |
 
 ---
 
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 6 | **Phase 6 complete — calibration; exit gate met (final phase).** Bridge crossings are the cordon screenlines. `etl/calibration.py` (`etl calibrate`) seeds published bridge AADT → AM-peak count targets (web-sourced: Wikipedia/CoV/MoTI; CoV+MoTI bulk feeds unobtainable, estimates flagged). `sim/calibrate.py` (`sim calibrate --run`) counts simulated AM-peak two-way gateway volumes from the FCD, fits a global demand scale, computes GEH, writes `calibration_results` + `docs/calibration/report.md`. Calibration exposed the Phase-4 east-viaduct over-routing / Lions-Gate starvation; fixed with per-gateway demand weights (`GATEWAY_WEIGHT`) in `sim/demand_census.py` (scale-invariant split correction). **Result: 5/5 screenlines GEH<5, mean 1.22.** Full-demand scale ~3.24 (≈18× the replay sub-sample) — full microsim exceeds SUMO's single-core ceiling, so replay sub-samples while the split holds. Re-ran am_base + am_granville on the calibrated demand. All 6 build phases (0–6) now complete. |
 | 2026-06-01 | 5 | **Fix: closure highlight is time-gated to the closure window.** The red "✕ closed" edges + scenario header showed from 07:00 even though Granville doesn't close until 08:00 — confusing (bridge marked closed while traffic crossed it). `web/index.html` now only reds the closed edges when `begin+T` is within `[closure.start, closure.end)`, and a live panel header reads "closes 08:00" (amber) → "✕ closed" (red) → "reopened" (green). Verified via DOM dump at 07:30 (amber, unmarked) vs 08:10 (red, ✕). |
 | 2026-06-01 | 5 | **Fix: closures now bar the whole bridge, not one edge.** A closed bridge had traffic running the opposite way because only the single nearest edge/direction was disallowed. `etl events` now derives each bridge's full drivable edge set (both directions + ramps) by buffering the named OSM bridge ways and intersecting the SUMO net (`_bridge_edges` + `BRIDGE_OSM_NAMES`); stores them in `events.params.edges` (Granville 43, Cambie 48, viaducts 54, Burrard 8, Lions Gate 2). `sim/cli.py` passes the full edge list through; `sim/librun.py` closes every lane of every edge; `web/index.html` reds them all + a `?run=` selector. Re-verified Granville: 0 new entries after the 08:00 closure (both ways), bridge empties by 08:04. FK-detach (`runs.scenario_id → NULL`) before re-seeding scenarios. |
 | 2026-06-01 | 5 | **Phase 5 complete — closure injection + before/after; exit gate met.** Unified the run path into `sim/librun.py` (one libsumo process → geo FCD + per-approach signals + tripinfo, with optional mid-run **closure**: disallow an edge's lanes at the event time, with `--device.rerouting` so traffic redistributes). `sim run --scenario close_<bridge>`; runs register their scenario + metrics. Viewer: scenario panel with Δ avg travel / wait / trips-done vs a matched baseline + the closed edge highlighted (✕). Demo: closing Granville vacated the bridge (200→2 after 08:00), rerouted traffic, +14 s travel/wait, −96 trips. Replaced run.py + tlscapture.py with librun. Accident/speed-drop primitives + click-to-place authoring → backlog. |

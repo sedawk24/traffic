@@ -23,23 +23,31 @@ census/zoning     geo FCD → Parquet trajectories    GeoJSON       vehicles by 
 
 ## Quick Start
 
-> Being built during Phase 0–2. The intended flow:
-
 ```bash
-# Prerequisites: Eclipse SUMO 1.27+ and Python 3.11+ with uv
-brew install --cask sumo            # macOS (or build from eclipse-sumo.org)
-uv sync                             # install Python dependencies
+# Prerequisites: Python 3.11+ with uv (SUMO 1.27 arrives as a wheel via uv sync)
+uv sync                                        # install Python + SUMO deps
 
-# Build the test-area scenario (downtown Vancouver peninsula) and run a day
-uv run etl all --area downtown-peninsula
-uv run sim run --scenario downtown-peninsula-baseline
+# 1. Build the data pipeline for the downtown peninsula (OSM net, transit,
+#    census OD, zoning, signals, closure scenarios, calibration targets)
+uv run python -m etl all                       # or a single step, e.g. `etl network`
+uv run python -m etl calibrate                 # seed bridge count targets
 
-# Serve and view in the browser
-uv run api serve                    # FastAPI on http://localhost:8000
-# open the web/ front end (Vite dev server) and load the run
+# 2. Run a calibrated census-driven AM peak (baseline) and a closure scenario
+uv run python -m sim run --demand census --name am_base --scale 0.18 \
+      --begin 25200 --end 32400
+uv run python -m sim run --demand census --name am_granville --scale 0.18 \
+      --begin 25200 --end 32400 --scenario close_granville_bridge
+
+# 3. Check calibration (simulated bridge volumes vs published counts, GEH)
+uv run python -m sim calibrate --run am_base   # -> docs/calibration/report.md
+
+# 4. Serve and view in the browser
+uv run uvicorn api.main:app                    # http://127.0.0.1:8000
+# open http://127.0.0.1:8000/  (add ?run=<id> to load a specific run)
 ```
 
-Exact commands are finalized as the pipeline lands; see `docs/development/phases/`.
+All six build phases (0–6) are complete; the calibrated peninsula vertical
+slice runs end to end. See `docs/development/` for phase plans and the change log.
 
 ## Documentation
 

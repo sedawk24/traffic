@@ -208,6 +208,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--seed", type=int, default=42)
     r.add_argument("--no-transit", action="store_true", help="exclude the Phase-1 bus pt")
     r.add_argument("--refresh-demand", action="store_true", help="regenerate routes")
+
+    c = sub.add_parser("calibrate", help="compare a baseline run to bridge counts (GEH)")
+    c.add_argument("--run", required=True, help="baseline run name to calibrate against")
     return p
 
 
@@ -215,4 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "run":
         return cmd_run(args)
+    if args.command == "calibrate":
+        from sim import calibrate
+
+        return calibrate.cmd_calibrate(args)
     return 1
