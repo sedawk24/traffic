@@ -77,3 +77,6 @@ npm-debug.log*
 
 # PyPI
 .pypirc
+
+# Project data (SQLite DB, Parquet traces, PMTiles, OSM/GTFS extracts, spike outputs)
+data/

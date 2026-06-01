@@ -1,0 +1,20 @@
+[project]
+name = "traffic"
+version = "0.1.0"
+description = "Greater Vancouver Traffic Simulator — SUMO-driven, browser-rendered."
+readme = "README.md"
+# Capped at <3.13 pragmatically to guarantee libsumo wheel availability on
+# Apple Silicon; widen once newer SUMO wheels are confirmed.
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "eclipse-sumo>=1.27.0",
+    "libsumo>=1.27.0",
+    "traci>=1.27.0",
+]
+
+[tool.uv]
+# Runtime deps are added via `uv add` (eclipse-sumo, libsumo, traci, ...).
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
