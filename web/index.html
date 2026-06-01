@@ -179,7 +179,9 @@ function layers(){
       for (let i=0;i<ps.length;i++){ if(ps[i]) pts.push({position:ps[i], color:sigColor(st[i]||'r')}); }
     }
     L.push(new deck.ScatterplotLayer({ id:'sig', data:pts, getPosition:d=>d.position, getFillColor:d=>d.color,
-      getRadius:2.4, radiusUnits:'pixels', radiusMinPixels:2, stroked:true, getLineColor:[25,25,25], lineWidthMinPixels:0.4, updateTriggers:{getFillColor:t} }));
+      getRadius:4, radiusUnits:'meters', radiusMinPixels:2.2, radiusMaxPixels:8,
+      stroked:true, getLineColor:[255,255,255,225], lineWidthUnits:'pixels', getLineWidth:0.8,
+      lineWidthMinPixels:0.4, lineWidthMaxPixels:1.2, updateTriggers:{getFillColor:t} }));
   }
   if (show.trails && !flow) L.push(new deck.TripsLayer({ id:'trips', data:trips, getPath:d=>d.path, getTimestamps:d=>d.timestamps,
     getColor:d=>VCOL[d.cls]||[150,150,150], currentTime:t, trailLength:8, fadeTrail:true, widthUnits:'pixels', getWidth:1, widthMinPixels:1, opacity:0.6 }));
