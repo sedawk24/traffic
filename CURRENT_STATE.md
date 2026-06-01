@@ -26,7 +26,9 @@ The system architecture and phased build plan are agreed, Phase 0 research is wr
 
 - **Signals + events (Task 6).** `etl signals`: 254 CoV signal locations in the cordon, 247 matched to a SUMO traffic-light junction (<60 m). `etl events`: 5 canonical bridge-closure scenarios wired to net edges (Lions Gate/Burrard/Granville/Cambie/viaducts) + 6 live DriveBC events near the approaches.
 
-Remaining in Phase 1: fine `netedit` cleanup (bridge connectivity, lane counts, gateway tagging) + `netdiff` capture (Tasks 1–2), then the transit (3) and census (4) loaders. See `docs/development/phases/phase-1.md`.
+- **Transit (Task 3).** `etl transit`: TransLink GTFS → SUMO pt via `gtfs2pt.py` (bus, cordon bbox) → **254 stops, 140 routes, 4,062 bus departures** (`data/sumo/peninsula_pt_*.xml`). SkyTrain/rail/SeaBus deferred (no rail/water edges in the road net).
+
+Remaining in Phase 1: fine `netedit` cleanup (bridge connectivity, lane counts, gateway tagging) + `netdiff` capture (Tasks 1–2), then the census (4) loader. See `docs/development/phases/phase-1.md`.
 
 ## What Is Next
 

@@ -55,7 +55,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 |---|------|--------|-------|
 | 1 | OSM → SUMO `.net.xml` for the peninsula (cordon at bridges) | In Progress | `etl network` + automated cordon trim done (7,307 edges / 266 TLS, UTM-10 geo; trimmed at the bridges to the peninsula); fine netedit cleanup (connectivity/lanes/gateways) pending |
 | 2 | Capture network edits as netdiff | Not Started | Survive OSM re-import |
-| 3 | TransLink GTFS static → SUMO pt (bus + rail) | Not Started | gtfs2pt.py |
+| 3 | TransLink GTFS static → SUMO pt (bus + rail) | Done (bus) | `etl transit`: gtfs2pt.py → 254 pt stops, 140 routes, 4,062 bus departures on the peninsula net. SkyTrain/rail/SeaBus deferred (need rail/water edges) |
 | 4 | StatCan 98-10-0459 OD + 98-10-0458 departure profiles → SQLite | Not Started | Open Licence |
 | 5 | Metro 2050 + Vancouver zoning (+ OSM landuse fallback) → zones | Done (peninsula) | `etl zoning`: CoV zoning + parks → 366 zones (5 classes) + 6 bridge gateways, clipped to cordon; zones.geojson exported. Metro 2050 deferred to region expansion; pop/emp weights to Phase 4 |
 | 6 | CoV signal locations + DriveBC Open511 ingest | Done | `etl signals`: 254 CoV signals in cordon, 247 matched to SUMO TLS (<60 m). `etl events`: 5 canonical bridge-closure scenarios (wired to net edges) + live DriveBC events |
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-05-31 | 1 | **Transit loader (Task 3).** `etl transit`: TransLink GTFS static → SUMO pt via gtfs2pt.py (bus, cordon bbox, `--repair`) → 254 stops + 140 routes + 4,062 bus departures (data/sumo/peninsula_pt_*.xml). SkyTrain/rail/SeaBus deferred (no rail/water edges in the road net). Added `rtree` dep (gtfs2pt requirement). |
 | 2026-05-31 | 1 | **Signals + events loaders (Task 6).** `etl signals`: CoV signal locations clipped to the cordon (254) and matched to the nearest SUMO traffic-light junction within 60 m (247/254). `etl events`: 5 canonical bridge-closure scenarios (Lions Gate/Burrard/Granville/Cambie/viaducts), each wired to the nearest drivable net edge, plus live DriveBC Open511 events near the approaches (6). Added `etl/util.py` (shared streaming download). |
 | 2026-05-31 | 1 | **Zoning loader (Task 5).** `etl zoning`: CoV zoning + CoV parks (Explore API v2.1) clipped to the cordon and reclassified to {residential, commercial, industrial, parkland, downtown-core}, plus 6 virtual bridge-gateway zones → 366 rows in `zones` + `data/zones/zones.geojson` (252 downtown-core, 58 parkland incl. Stanley Park, 22 industrial, 21 residential, 7 commercial, 6 gateways). Idempotent (delete-by-source + deterministic positional ids). Metro 2050 deferred to the region expansion; pop/emp weights to Phase 4. |
 | 2026-05-31 | 1 | **Automated cordon trim.** Added `config.CORDON_POLYGON` + netconvert `--keep-edges.in-geo-boundary` & `--keep-edges.components 1` to `etl network`; trims the raw OSM net at the bridges to the peninsula (15,598 → 7,307 edges; verified geo extent lon[−123.16,−123.08] lat[49.27,49.32], with downtown/Stanley Park in and Kitsilano/North Van out). Added geo/ETL deps (geopandas, pandas, shapely, pyproj, requests). |
