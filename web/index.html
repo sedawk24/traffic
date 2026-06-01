@@ -104,7 +104,7 @@ map.addControl(overlay);
 // ---- state ---------------------------------------------------------------
 let T=+Q.get('t')||300, tMax=0, begin=25200, playing=Q.get('play')!=='0', speed=30, last=0, zoom=Z0;
 let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
-let sigPos={}, sigChanges=[];
+let sigGroups=[], sigChangesMap={};
 const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
 init().catch(e => { const l=document.getElementById('loading'); if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
@@ -118,7 +118,18 @@ async function loadRun(id){
   ]);
   begin = meta.params.begin ?? 25200; tMax = meta.stats.trajectory.t_max;
   vehicles = meta.stats.trajectory.vehicles; trips = t; volMap = vol;
-  sigPos = sig.pos || {}; sigChanges = Object.entries(sig.changes || {});
+  sigChangesMap = sig.changes || {};
+  sigGroups = [];                                   // one indicator per approach (incoming edge)
+  const sp = sig.pos || {}, se = sig.edges || {};
+  for (const tls in se){
+    const byEdge = {};
+    (se[tls]||[]).forEach((e,i)=>{ if (e==null || !sp[tls] || !sp[tls][i]) return; (byEdge[e]=byEdge[e]||[]).push(i); });
+    for (const e in byEdge){
+      const idxs=byEdge[e]; let lon=0, lat=0;
+      for (const i of idxs){ lon+=sp[tls][i][0]; lat+=sp[tls][i][1]; }
+      sigGroups.push({ tls, idxs, position:[lon/idxs.length, lat/idxs.length] });
+    }
+  }
   for (const tr of trips){ tr.t0=tr.timestamps[0]; tr.tN=tr.timestamps[tr.timestamps.length-1]; }
   document.getElementById('vcount').textContent = vehicles.toLocaleString();
   document.getElementById('runname').textContent = meta.params.name ?? id;
@@ -170,18 +181,18 @@ function layers(){
     lineWidthUnits:'pixels', lineWidthMinPixels:0.4, updateTriggers:{getLineColor:flow, getLineWidth:flow}, parameters:{depthTest:false} }));
   if (show.transit && transitGeo) L.push(new deck.GeoJsonLayer({ id:'transit', data:transitGeo, stroked:true, filled:false,
     getLineColor:TRANSIT_COL, getLineWidth:1, lineWidthUnits:'pixels', lineWidthMinPixels:0.7, parameters:{depthTest:false} }));
-  if (show.signals && zoom>=SIG_Z && sigChanges.length){
-    const pts=[];
-    for (const [tls, ch] of sigChanges){
-      let idx=-1;
-      if (ch.length && ch[0][0]<=t){ let lo=0,hi=ch.length-1; while(lo<=hi){const m=(lo+hi)>>1; if(ch[m][0]<=t){idx=m;lo=m+1;}else hi=m-1;} }
-      const st = idx>=0 ? ch[idx][1] : (ch[0]?ch[0][1]:''), ps = sigPos[tls]||[];
-      for (let i=0;i<ps.length;i++){ if(ps[i]) pts.push({position:ps[i], color:sigColor(st[i]||'r')}); }
-    }
-    L.push(new deck.ScatterplotLayer({ id:'sig', data:pts, getPosition:d=>d.position, getFillColor:d=>d.color,
-      getRadius:4, radiusUnits:'meters', radiusMinPixels:2.2, radiusMaxPixels:8,
-      stroked:true, getLineColor:[255,255,255,225], lineWidthUnits:'pixels', getLineWidth:0.8,
-      lineWidthMinPixels:0.4, lineWidthMaxPixels:1.2, updateTriggers:{getFillColor:t} }));
+  if (show.signals && zoom>=SIG_Z && sigGroups.length){
+    const stateAt = ch => { if (!ch||!ch.length||ch[0][0]>t) return ch&&ch[0]?ch[0][1]:'';
+      let lo=0,hi=ch.length-1,idx=0; while(lo<=hi){const m=(lo+hi)>>1; if(ch[m][0]<=t){idx=m;lo=m+1;}else hi=m-1;} return ch[idx][1]; };
+    const data = sigGroups.map(g=>{
+      const st = stateAt(sigChangesMap[g.tls]); let col='r';   // approach is green if any movement is green, else yellow, else red
+      for (const i of g.idxs){ const c=st[i]||'r'; if (c==='G'||c==='g'){ col='G'; break; } if ((c==='y'||c==='Y') && col==='r') col='y'; }
+      return { position:g.position, color:sigColor(col) };
+    });
+    L.push(new deck.ScatterplotLayer({ id:'sig', data, getPosition:d=>d.position, getFillColor:d=>d.color,
+      getRadius:5, radiusUnits:'meters', radiusMinPixels:2.6, radiusMaxPixels:9,
+      stroked:true, getLineColor:[255,255,255,230], lineWidthUnits:'pixels', getLineWidth:1,
+      lineWidthMinPixels:0.5, lineWidthMaxPixels:1.5, updateTriggers:{getFillColor:t} }));
   }
   if (show.trails && !flow) L.push(new deck.TripsLayer({ id:'trips', data:trips, getPath:d=>d.path, getTimestamps:d=>d.timestamps,
     getColor:d=>VCOL[d.cls]||[150,150,150], currentTime:t, trailLength:8, fadeTrail:true, widthUnits:'pixels', getWidth:1, widthMinPixels:1, opacity:0.6 }));

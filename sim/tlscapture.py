@@ -44,16 +44,22 @@ def capture(net: Path, routes: Path, begin: int, end: int, with_transit: bool, o
 
     ids = libsumo.trafficlight.getIDList()
     pos = {}
+    edges = {}  # incoming approach edge per signal index, so the viewer can group
     for t in ids:
         stoplines = []
+        es = []
         for grp in libsumo.trafficlight.getControlledLinks(t):
             if grp:
-                shape = libsumo.lane.getShape(grp[0][0])
+                lane = grp[0][0]
+                shape = libsumo.lane.getShape(lane)
                 lon, lat = libsumo.simulation.convertGeo(*shape[-1])
                 stoplines.append([round(lon, 6), round(lat, 6)])
+                es.append(libsumo.lane.getEdgeID(lane))
             else:
                 stoplines.append(None)
+                es.append(None)
         pos[t] = stoplines
+        edges[t] = es
 
     changes: dict[str, list] = {t: [] for t in ids}
     last: dict[str, str] = {}
@@ -67,7 +73,7 @@ def capture(net: Path, routes: Path, begin: int, end: int, with_transit: bool, o
                 last[t] = s
     libsumo.close()
 
-    out.write_text(json.dumps({"begin": begin, "pos": pos, "changes": changes}))
+    out.write_text(json.dumps({"begin": begin, "pos": pos, "edges": edges, "changes": changes}))
 
 
 if __name__ == "__main__":
