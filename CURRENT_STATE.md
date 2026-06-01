@@ -1,8 +1,8 @@
 # Current State
 
-**Status: Phase 0 complete. Phase 1 (data pipeline) is next.**
+**Status: Phase 1 (data pipeline) complete — full ETL produces SUMO-ready inputs + a populated SQLite DB. Phase 2 (end-to-end vertical slice) is next.**
 
-The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. No application code yet beyond the toolchain spike.
+The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
 ---
 
@@ -16,14 +16,28 @@ The system architecture and phased build plan are agreed, Phase 0 research is wr
   - ✅ Solid: OSM→SUMO, TransLink GTFS static, StatCan 2021 commuting OD (98-10-0459 / 98-10-0458), Metro 2050 + Vancouver zoning, CoV signal locations, DriveBC Open511 closures.
 - **Toolchain verified (Phase 0 spike).** SUMO 1.27 + `libsumo`/`traci`/`sumolib` installed via `uv` on Apple Silicon (no build issues). SUMO writes FCD as XML **and Parquet** directly, and `--fcd-output.geo` is supported — validating the trace data path. Benchmark on this machine: **~225k vehicle-updates/sec, ~34× real-time at ~8,000 active vehicles** (`scripts/phase0_spike.py`).
 
+## Phase 1 — Data Pipeline (complete)
+
+All loaders are idempotent `etl` steps (`uv run python -m etl <step>`):
+- **ETL backbone.** `etl/` package: SQLite schema (`etl/schema.sql`, 12 tables), idempotent CLI (`uv run python -m etl <step>` — `init-db`, `network`, `zoning`, `census`, `transit`, `signals`, `events`, `all`, `status`), open-data source registry for provenance, and per-loader stubs. `ruff` added as the dev linter (checks pass).
+- **Network (Task 1, automated).** `etl network`: OSM via SUMO `osmGet.py` (Overpass, raw XML cached) → `netconvert` → `data/sumo/peninsula.net.xml`, with an **automated bridge-cordon trim** (`--keep-edges.in-geo-boundary` over `config.CORDON_POLYGON` + largest-component) cutting the raw net to the peninsula: **7,307 edges / 3,201 junctions / 266 TLS** (down from 15,598 pre-trim); UTM-10 geo-projection stored so `--fcd-output.geo` works. Verified geo extent lon[−123.158, −123.078] lat[49.266, 49.324]; downtown/Gastown/Stanley Park in, Kitsilano/North Van out. Provenance + metadata in `data/traffic.db`.
+
+- **Zoning (Task 5).** `etl zoning`: City of Vancouver zoning + parks (Explore API), clipped to the cordon and reclassified to {residential, commercial, industrial, parkland, downtown-core}, plus 6 virtual bridge-gateway zones → **366 zones** in `data/traffic.db` + `data/zones/zones.geojson` (252 downtown-core, 58 parkland incl. Stanley Park, 22 industrial, 21 residential, 7 commercial). Metro 2050 deferred to the region expansion; population/employment weights to Phase 4 (census).
+
+- **Signals + events (Task 6).** `etl signals`: 254 CoV signal locations in the cordon, 247 matched to a SUMO traffic-light junction (<60 m). `etl events`: 5 canonical bridge-closure scenarios wired to net edges (Lions Gate/Burrard/Granville/Cambie/viaducts) + 6 live DriveBC events near the approaches.
+
+- **Transit (Task 3).** `etl transit`: TransLink GTFS → SUMO pt via `gtfs2pt.py` (bus, cordon bbox) → **254 stops, 140 routes, 4,062 bus departures** (`data/sumo/peninsula_pt_*.xml`). SkyTrain/rail/SeaBus deferred (no rail/water edges in the road net).
+- **Census (Task 4).** `etl census`: streamed StatCan 98-10-0459 (OD) + 98-10-0458 (departure) full-Canada tables, filtered to Greater Vancouver → **456 intra-GVRD OD flows** + **2,618 departure-profile rows**. Verified: 222k intra-GVRD into Vancouver (top origins Vancouver/Burnaby/Surrey/Richmond), AM-peak histogram, 57/23/19 car/transit/active.
+
+**Optional, deferred:** a manual `netedit` polish pass (lane counts/turns/gateway tagging). `etl network` already emits a plain-XML baseline and the netdiff workflow is documented (`phase-1.md`), so such edits can survive an OSM re-import.
+
 ## What Is In Progress
 
-Nothing actively in progress — Phase 0 is complete and committed. Ready to begin **Phase 1 (data pipeline)**; see `docs/development/phases/phase-1.md`.
+Nothing actively in progress — Phase 1 is complete. Ready to begin **Phase 2 (end-to-end vertical slice)**.
 
 ## What Is Next
 
-- **Phase 1 — Data pipeline.** Repeatable ETL: OSM→SUMO network for the peninsula, GTFS→transit, census→OD, zoning→zones, into SQLite + SUMO inputs.
-- **Phase 2 — End-to-end vertical slice.** One simulated day with placeholder demand → Parquet trace → FastAPI → minimal deck.gl viewer with a day-scrubber. *Proves every link in the chain.*
+- **Phase 2 — End-to-end vertical slice (next).** One simulated day with placeholder demand → Parquet trace → FastAPI → minimal deck.gl viewer with a day-scrubber. *Proves every link in the chain.*
 - **Phase 3 — Visualization.** Make it beautiful: PMTiles basemap, land-use zones, styled roads/bridges/transit, vehicle icons by type, LOD, smooth zoom.
 - **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 - **Phase 5 — Scenarios.** Accident/closure injection via TraCI; before/after impact in the UI.

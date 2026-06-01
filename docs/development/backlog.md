@@ -25,9 +25,12 @@ Future features, ideas, and deferred work that surface during development. Items
 - **Adaptive/coordinated signals via TraCI** beyond actuated defaults (e.g., live green-wave control).
 - **Demand calibration loop** using `routeSampler.py` against edge/turn counts.
 - **Trace compression / streaming** refinements (GeoArrow chunking, delta encoding) for larger areas.
+- **Zoning refinement.** Beyond the peninsula, disambiguate CD (Comprehensive Development) — it blanket-maps to downtown-core now; aggregate per-parcel zoning into traffic-analysis zones (TAZ) for OD; map each gateway zone to its SUMO bridge edge(s) for demand injection; add the Metro 2050 base + OSM `landuse` fallback for region-wide land use.
 
 ## Technical Debt
 
+- **Reproducible OSM acquisition.** Phase 1 fetches OSM live via SUMO `osmGet.py` (Overpass). For byte-stable re-imports, optionally pin a dated Geofabrik BC extract and clip with a keep-polygon instead.
+- **SpatiaLite option.** Geometry is stored as GeoJSON text and spatial ops run in geopandas; revisit SpatiaLite if zone/edge spatial joins need to move into SQL.
 - **OSM network maintenance.** Re-import workflow and netdiff hygiene as OSM data drifts.
 - **Test coverage** for ETL idempotency and trajectory post-processing.
 - **Packaging.** A one-command installer / Docker option if we ever want it to run beyond the dev repo.
