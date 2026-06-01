@@ -2,7 +2,7 @@
 
 **Goal:** Prove every link in the chain — network → demand → SUMO → trace → backend → browser — with a deliberately minimal renderer. Nothing polished; everything connected.
 
-**Status:** Not Started.
+**Status:** In Progress — the `sim/` runner (Tasks 1–3) produces a registered trajectory trace (baseline: 3,877 vehicles / peak 566 / 1.57M rows incl. buses). FastAPI backend (Task 4) + minimal viewer (Task 5) next.
 
 ## Why a renderer is in this phase (change from the brief)
 

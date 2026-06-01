@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 1 (data pipeline) complete — full ETL produces SUMO-ready inputs + a populated SQLite DB. Phase 2 (end-to-end vertical slice) is next.**
+**Status: Phase 2 (end-to-end vertical slice) in progress — the `sim` runner produces a registered trajectory trace; FastAPI backend + minimal viewer are next.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -33,7 +33,7 @@ All loaders are idempotent `etl` steps (`uv run python -m etl <step>`):
 
 ## What Is In Progress
 
-Nothing actively in progress — Phase 1 is complete. Ready to begin **Phase 2 (end-to-end vertical slice)**.
+**Phase 2 — End-to-end vertical slice.** The `sim/` runner (Tasks 1–3) is done: `uv run python -m sim run` generates placeholder demand (randomTrips, fringe-biased to the bridges), runs SUMO (batch, geo FCD Parquet), post-processes to a trajectory Parquet (`t/id/cls/lon/lat/speed/angle`), and registers the run in `runs`. Baseline (07:00–08:00, with transit) = 3,877 vehicles, peak 566 concurrent, 1.57M rows (incl. buses), 32 MB at `data/runs/baseline/trajectory.parquet`. Next: the FastAPI backend (Task 4 — stream Arrow + serve net/zones GeoJSON) and the minimal deck.gl/MapLibre viewer with a day-scrubber (Task 5).
 
 ## What Is Next
 
