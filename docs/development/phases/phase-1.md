@@ -2,7 +2,7 @@
 
 **Goal:** A repeatable, idempotent ETL that turns open data into a SUMO-ready network + demand + zones for the downtown peninsula, plus a SQLite database of structured inputs.
 
-**Status:** In Progress — the ETL backbone (SQLite schema + idempotent `python -m etl` CLI) and the OSM→SUMO network build with an automated bridge-cordon trim (`etl network`, 7,307 edges) are done; fine `netedit` cleanup + `netdiff` (Tasks 1–2) and the zoning/census/transit/signals/events loaders (Tasks 3–6) are pending.
+**Status:** In Progress — the ETL backbone (SQLite schema + idempotent `python -m etl` CLI) and the OSM→SUMO network build with an automated bridge-cordon trim (`etl network`, 7,307 edges) are done, plus the zoning loader (Task 5: CoV zoning + parks + bridge gateways → 366 zones); fine `netedit` cleanup + `netdiff` (Tasks 1–2) and the transit (3), census (4), and signals/DriveBC (6) loaders are pending.
 
 ## Scope
 

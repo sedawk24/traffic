@@ -57,7 +57,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 2 | Capture network edits as netdiff | Not Started | Survive OSM re-import |
 | 3 | TransLink GTFS static → SUMO pt (bus + rail) | Not Started | gtfs2pt.py |
 | 4 | StatCan 98-10-0459 OD + 98-10-0458 departure profiles → SQLite | Not Started | Open Licence |
-| 5 | Metro 2050 + Vancouver zoning (+ OSM landuse fallback) → zones | Not Started | TAZ polygons, land-use class, gateway flags |
+| 5 | Metro 2050 + Vancouver zoning (+ OSM landuse fallback) → zones | Done (peninsula) | `etl zoning`: CoV zoning + parks → 366 zones (5 classes) + 6 bridge gateways, clipped to cordon; zones.geojson exported. Metro 2050 deferred to region expansion; pop/emp weights to Phase 4 |
 | 6 | CoV signal locations + DriveBC Open511 ingest | Not Started | Reference + scenario library |
 | 7 | SQLite schema + idempotent ETL CLI | Mostly Done | `etl/schema.sql` (12 tables) + `python -m etl` CLI live; idempotent harness in place |
 
@@ -68,7 +68,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | ETL re-run produces identical DB (idempotent) | Partial | Harness in place (CREATE IF NOT EXISTS + natural-key upserts); content idempotent, audit `fetched_at` intentionally volatile |
 | OD totals reconcile with census source | Pending | Census loader not yet built |
 | Network opens cleanly in netedit; bridges/gateways present | Partial | Cordon-trimmed; reads cleanly via sumolib with bridge gateway stubs present; fine netedit pass (connectivity/lanes/gateway tagging) pending |
-| Zone polygons render with land-use classes | Pending | |
+| Zone polygons render with land-use classes | Partial | Data ready: 366 zones with land_use in DB + zones.geojson; visual render is Phase 3 |
 
 ---
 
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-05-31 | 1 | **Zoning loader (Task 5).** `etl zoning`: CoV zoning + CoV parks (Explore API v2.1) clipped to the cordon and reclassified to {residential, commercial, industrial, parkland, downtown-core}, plus 6 virtual bridge-gateway zones → 366 rows in `zones` + `data/zones/zones.geojson` (252 downtown-core, 58 parkland incl. Stanley Park, 22 industrial, 21 residential, 7 commercial, 6 gateways). Idempotent (delete-by-source + deterministic positional ids). Metro 2050 deferred to the region expansion; pop/emp weights to Phase 4. |
 | 2026-05-31 | 1 | **Automated cordon trim.** Added `config.CORDON_POLYGON` + netconvert `--keep-edges.in-geo-boundary` & `--keep-edges.components 1` to `etl network`; trims the raw OSM net at the bridges to the peninsula (15,598 → 7,307 edges; verified geo extent lon[−123.16,−123.08] lat[49.27,49.32], with downtown/Stanley Park in and Kitsilano/North Van out). Added geo/ETL deps (geopandas, pandas, shapely, pyproj, requests). |
 | 2026-05-31 | 1 | **Phase 1 started.** Built the ETL backbone: `etl/` package with SQLite schema (`schema.sql`, 12 tables), idempotent CLI (`python -m etl`: init-db/network/zoning/census/transit/signals/events/all/status), open-data source registry, and loader stubs; added `ruff` dev dep (checks pass). Implemented `etl network`: OSM via SUMO `osmGet.py` → `netconvert` → `data/sumo/peninsula.net.xml` (15,598 edges / 6,593 junctions / 473 TLS; UTM-10 geo-projection stored). Provenance + net metadata recorded in `data/traffic.db`. Manual netedit cordon cleanup + zoning/census/transit/signals/events loaders pending. |
 | 2026-05-31 | 0 | **Phase 0 complete.** SUMO 1.27 + libsumo verified on Apple Silicon via `uv`; FCD XML + Parquet and `--fcd-output.geo` confirmed; benchmark ~225k vehicle-updates/sec (~34× real-time at 8k active vehicles). Added pyproject.toml, uv.lock, scripts/phase0_spike.py. |

@@ -87,6 +87,11 @@ SOURCES: dict[str, dict[str, str]] = {
         "url": "https://opendata.vancouver.ca/explore/dataset/zoning-districts-and-labels/",
         "license": "OGL-Vancouver",
     },
+    "cov_parks": {
+        "name": "City of Vancouver parks (polygon representation)",
+        "url": "https://opendata.vancouver.ca/explore/dataset/parks-polygon-representation/",
+        "license": "OGL-Vancouver",
+    },
     "cov_signals": {
         "name": "City of Vancouver traffic signals (locations)",
         "url": "https://opendata.vancouver.ca/explore/dataset/traffic-signals/",

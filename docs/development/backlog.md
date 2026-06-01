@@ -25,6 +25,7 @@ Future features, ideas, and deferred work that surface during development. Items
 - **Adaptive/coordinated signals via TraCI** beyond actuated defaults (e.g., live green-wave control).
 - **Demand calibration loop** using `routeSampler.py` against edge/turn counts.
 - **Trace compression / streaming** refinements (GeoArrow chunking, delta encoding) for larger areas.
+- **Zoning refinement.** Beyond the peninsula, disambiguate CD (Comprehensive Development) — it blanket-maps to downtown-core now; aggregate per-parcel zoning into traffic-analysis zones (TAZ) for OD; map each gateway zone to its SUMO bridge edge(s) for demand injection; add the Metro 2050 base + OSM `landuse` fallback for region-wide land use.
 
 ## Technical Debt
 

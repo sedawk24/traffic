@@ -22,7 +22,9 @@ The system architecture and phased build plan are agreed, Phase 0 research is wr
 - **ETL backbone.** `etl/` package: SQLite schema (`etl/schema.sql`, 12 tables), idempotent CLI (`uv run python -m etl <step>` — `init-db`, `network`, `zoning`, `census`, `transit`, `signals`, `events`, `all`, `status`), open-data source registry for provenance, and per-loader stubs. `ruff` added as the dev linter (checks pass).
 - **Network (Task 1, automated).** `etl network`: OSM via SUMO `osmGet.py` (Overpass, raw XML cached) → `netconvert` → `data/sumo/peninsula.net.xml`, with an **automated bridge-cordon trim** (`--keep-edges.in-geo-boundary` over `config.CORDON_POLYGON` + largest-component) cutting the raw net to the peninsula: **7,307 edges / 3,201 junctions / 266 TLS** (down from 15,598 pre-trim); UTM-10 geo-projection stored so `--fcd-output.geo` works. Verified geo extent lon[−123.158, −123.078] lat[49.266, 49.324]; downtown/Gastown/Stanley Park in, Kitsilano/North Van out. Provenance + metadata in `data/traffic.db`.
 
-Remaining in Phase 1: fine `netedit` cleanup (bridge connectivity, lane counts, gateway tagging) + `netdiff` capture (Tasks 1–2), then the zoning, census, transit, signals, and DriveBC loaders (Tasks 3–6). See `docs/development/phases/phase-1.md`.
+- **Zoning (Task 5).** `etl zoning`: City of Vancouver zoning + parks (Explore API), clipped to the cordon and reclassified to {residential, commercial, industrial, parkland, downtown-core}, plus 6 virtual bridge-gateway zones → **366 zones** in `data/traffic.db` + `data/zones/zones.geojson` (252 downtown-core, 58 parkland incl. Stanley Park, 22 industrial, 21 residential, 7 commercial). Metro 2050 deferred to the region expansion; population/employment weights to Phase 4 (census).
+
+Remaining in Phase 1: fine `netedit` cleanup (bridge connectivity, lane counts, gateway tagging) + `netdiff` capture (Tasks 1–2), then the transit (3), census (4), and signals/DriveBC (6) loaders. See `docs/development/phases/phase-1.md`.
 
 ## What Is Next
 
