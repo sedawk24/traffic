@@ -1,8 +1,8 @@
 # Current State
 
-**Status: Phase 0 complete. Phase 1 (data pipeline) is next.**
+**Status: Phase 1 (data pipeline) in progress — ETL backbone + automated OSM→SUMO network build are done.**
 
-The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. No application code yet beyond the toolchain spike.
+The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 has begun: the `etl/` package (SQLite schema + idempotent CLI) is built and the automated OSM→SUMO step has produced the peninsula network (15,598 edges / 6,593 junctions / 473 signals; UTM-10 geo-projection stored).
 
 ---
 
@@ -18,11 +18,15 @@ The system architecture and phased build plan are agreed, Phase 0 research is wr
 
 ## What Is In Progress
 
-Nothing actively in progress — Phase 0 is complete and committed. Ready to begin **Phase 1 (data pipeline)**; see `docs/development/phases/phase-1.md`.
+**Phase 1 — Data pipeline.** Done so far:
+- **ETL backbone.** `etl/` package: SQLite schema (`etl/schema.sql`, 12 tables), idempotent CLI (`uv run python -m etl <step>` — `init-db`, `network`, `zoning`, `census`, `transit`, `signals`, `events`, `all`, `status`), open-data source registry for provenance, and per-loader stubs. `ruff` added as the dev linter (checks pass).
+- **Network (Task 1, automated).** `etl network`: OSM extract via SUMO `osmGet.py` (Overpass, raw XML cached for provenance) → `netconvert` → `data/sumo/peninsula.net.xml` (15,598 edges / 6,593 junctions / 473 TLS; UTM-10 geo-projection stored so `--fcd-output.geo` works). Provenance + network metadata recorded in `data/traffic.db`.
+
+Remaining in Phase 1: manual `netedit` cordon cleanup of bridges/gateways/lanes + `netdiff` capture (Tasks 1–2, human-in-the-loop), then the zoning, census, transit, signals, and DriveBC loaders (Tasks 3–6). See `docs/development/phases/phase-1.md`.
 
 ## What Is Next
 
-- **Phase 1 — Data pipeline.** Repeatable ETL: OSM→SUMO network for the peninsula, GTFS→transit, census→OD, zoning→zones, into SQLite + SUMO inputs.
+- **Phase 1 (finish) — Data pipeline.** Manual `netedit` cordon cleanup + `netdiff`; then zoning→zones, census→OD/departures, GTFS→transit, CoV signals, DriveBC closures — each an idempotent `etl` step into SQLite + SUMO inputs.
 - **Phase 2 — End-to-end vertical slice.** One simulated day with placeholder demand → Parquet trace → FastAPI → minimal deck.gl viewer with a day-scrubber. *Proves every link in the chain.*
 - **Phase 3 — Visualization.** Make it beautiful: PMTiles basemap, land-use zones, styled roads/bridges/transit, vehicle icons by type, LOD, smooth zoom.
 - **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.

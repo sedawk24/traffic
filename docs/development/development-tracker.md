@@ -9,7 +9,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | Phase | Name | Status |
 |-------|------|--------|
 | 0 | Research writeup + environment spike | Complete |
-| 1 | Data pipeline (ETL → SQLite + SUMO inputs) | Not Started |
+| 1 | Data pipeline (ETL → SQLite + SUMO inputs) | In Progress |
 | 2 | End-to-end vertical slice (tracer bullet) | Not Started |
 | 3 | Visualization (clean cartographic + icons) | Not Started |
 | 4 | Demand modeling (realistic) | Not Started |
@@ -47,27 +47,27 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 1: Data pipeline (Not Started)
+## Phase 1: Data pipeline (In Progress)
 
 ### Tasks
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | OSM → SUMO `.net.xml` for the peninsula (cordon at bridges) | Not Started | netconvert + manual cleanup |
+| 1 | OSM → SUMO `.net.xml` for the peninsula (cordon at bridges) | In Progress | Automated `etl network` done (15,598 edges / 473 TLS, UTM-10 geo); manual netedit cordon cleanup pending |
 | 2 | Capture network edits as netdiff | Not Started | Survive OSM re-import |
 | 3 | TransLink GTFS static → SUMO pt (bus + rail) | Not Started | gtfs2pt.py |
 | 4 | StatCan 98-10-0459 OD + 98-10-0458 departure profiles → SQLite | Not Started | Open Licence |
 | 5 | Metro 2050 + Vancouver zoning (+ OSM landuse fallback) → zones | Not Started | TAZ polygons, land-use class, gateway flags |
 | 6 | CoV signal locations + DriveBC Open511 ingest | Not Started | Reference + scenario library |
-| 7 | SQLite schema + idempotent ETL CLI | Not Started | Re-run → identical DB |
+| 7 | SQLite schema + idempotent ETL CLI | Mostly Done | `etl/schema.sql` (12 tables) + `python -m etl` CLI live; idempotent harness in place |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| ETL re-run produces identical DB (idempotent) | Pending | |
-| OD totals reconcile with census source | Pending | |
-| Network opens cleanly in netedit; bridges/gateways present | Pending | |
+| ETL re-run produces identical DB (idempotent) | Partial | Harness in place (CREATE IF NOT EXISTS + natural-key upserts); content idempotent, audit `fetched_at` intentionally volatile |
+| OD totals reconcile with census source | Pending | Census loader not yet built |
+| Network opens cleanly in netedit; bridges/gateways present | Partial | Reads cleanly via sumolib; netedit cordon cleanup of bridges/gateways pending |
 | Zone polygons render with land-use classes | Pending | |
 
 ---
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-05-31 | 1 | **Phase 1 started.** Built the ETL backbone: `etl/` package with SQLite schema (`schema.sql`, 12 tables), idempotent CLI (`python -m etl`: init-db/network/zoning/census/transit/signals/events/all/status), open-data source registry, and loader stubs; added `ruff` dev dep (checks pass). Implemented `etl network`: OSM via SUMO `osmGet.py` → `netconvert` → `data/sumo/peninsula.net.xml` (15,598 edges / 6,593 junctions / 473 TLS; UTM-10 geo-projection stored). Provenance + net metadata recorded in `data/traffic.db`. Manual netedit cordon cleanup + zoning/census/transit/signals/events loaders pending. |
 | 2026-05-31 | 0 | **Phase 0 complete.** SUMO 1.27 + libsumo verified on Apple Silicon via `uv`; FCD XML + Parquet and `--fcd-output.geo` confirmed; benchmark ~225k vehicle-updates/sec (~34× real-time at 8k active vehicles). Added pyproject.toml, uv.lock, scripts/phase0_spike.py. |
 | 2026-05-31 | 0 | Project planning complete; architecture + phased plan agreed. Phase 0 research verified (with corrections: RTDS retired, CoV counts not bulk, Trip Diary dashboard-only). Tracking files and research deliverables populated. |
 | 2026-05-31 | -- | Initial development tracker created |

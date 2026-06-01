@@ -28,6 +28,9 @@ Future features, ideas, and deferred work that surface during development. Items
 
 ## Technical Debt
 
+- **Reproducible OSM acquisition.** Phase 1 fetches OSM live via SUMO `osmGet.py` (Overpass). For byte-stable re-imports, optionally pin a dated Geofabrik BC extract and clip with a keep-polygon instead.
+- **Automated cordon trim.** Clip the raw OSM net to the bridge-cordon polygon programmatically (e.g. netconvert `--keep-edges.in-geo-boundary` / a keep-polygon) to minimise manual `netedit` and survive re-imports — the current raw net spills past the cordon where OSM ways straddle the bbox.
+- **SpatiaLite option.** Geometry is stored as GeoJSON text and spatial ops run in geopandas; revisit SpatiaLite if zone/edge spatial joins need to move into SQL.
 - **OSM network maintenance.** Re-import workflow and netdiff hygiene as OSM data drifts.
 - **Test coverage** for ETL idempotency and trajectory post-processing.
 - **Packaging.** A one-command installer / Docker option if we ever want it to run beyond the dev repo.
