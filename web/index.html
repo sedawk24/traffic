@@ -40,7 +40,7 @@
 <body>
 <div id="map"></div>
 <div id="title" class="card"><b>Greater Vancouver Traffic Simulator</b><br>
-  <span class="sub">Downtown peninsula · <span id="runname">baseline</span> · <span id="vcount">0</span> vehicles</span></div>
+  <span class="sub"><span id="arealabel">Downtown peninsula</span> · <span id="runname">baseline</span> · <span id="vcount">0</span> vehicles</span></div>
 <div id="scenario" class="card" style="display:none"></div>
 <div id="legend" class="card"></div>
 <div id="loading" class="card">Loading network, zones &amp; trace…</div>
@@ -48,7 +48,7 @@
   <button id="play">⏸ Pause</button>
   <span id="clock">07:00:00</span>
   <input id="scrub" type="range" min="0" max="100" value="0" />
-  <label style="font-size:12px;color:var(--muted)">run <select id="scenario"></select></label>
+  <label style="font-size:12px;color:var(--muted)">run <select id="runsel"></select></label>
   <label style="font-size:12px;color:var(--muted)">speed <select id="speed">
     <option value="15">15×</option><option value="30" selected>30×</option>
     <option value="60">60×</option><option value="120">120×</option></select></label>
@@ -73,7 +73,8 @@ const LOD_Z = 13.2;   // < flow ribbons | ≥ icons
 const SIG_Z = 14.8;   // ≥ : show live traffic-signal states
 const css = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 const hms = sec => { const f=n=>String(Math.floor(n)).padStart(2,'0'); return `${f(sec/3600%24)}:${f(sec/60%60)}:${f(sec%60)}`; };
-const volColor = v => { const x=Math.min(1, Math.sqrt((v||0)/180));
+let volRef = 180;   // per-run "busy" volume (high percentile); set in loadRun
+const volColor = v => { const x=Math.min(1, Math.sqrt((v||0)/volRef));
   return [Math.round(60+170*x), Math.round(160-110*x), Math.round(200-150*x), 215]; };
 // congestion: stopped (red) -> moving (green); s in m/s
 const congColor = s => { const x=Math.max(0,Math.min(1,(s||0)/11));
@@ -110,9 +111,38 @@ let T=+Q.get('t')||300, tMax=0, begin=25200, playing=Q.get('play')!=='0', speed=
 let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
 let sigGroups=[], sigChangesMap={};
 let runsList=[], closedEdges=[], closedMarker=null, closedStart=0, closedEnd=0, scenarioInfo=null;
+// per-area network/zones/transit, loaded on demand and cached
+const AREA_VIEW = { peninsula:{center:[-123.115,49.283],zoom:12.5}, metro:{center:[-122.99,49.22],zoom:10.2} };
+const areaData = {}; let curArea=null;
 const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
 init().catch(e => { const l=document.getElementById('loading'); if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
+
+// Load (and cache) a study area's network + peninsula-only zones/transit, and
+// drop the map to the area's default view when switching areas.
+async function loadArea(area){
+  if (!areaData[area]){
+    const net = await fetch(`/api/network?net=${area}`).then(r=>r.json());
+    let zonesP=null, gw=[], tg=null;
+    if (area === 'peninsula'){
+      const [zones, transit] = await Promise.all([
+        fetch('/api/zones').then(r=>r.json()).catch(()=>({features:[]})),
+        fetch('/api/transit').then(r=>r.json()).catch(()=>({features:[]})),
+      ]);
+      zonesP = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
+      gw = zones.features.filter(f=>f.properties.is_gateway);
+      tg = transit;
+    }
+    areaData[area] = { roads:net, zonesPoly:zonesP, gateways:gw, transitGeo:tg };
+  }
+  const d = areaData[area];
+  roads=d.roads; zonesPoly=d.zonesPoly; transitGeo=d.transitGeo; gateways=d.gateways;
+  document.getElementById('arealabel').textContent = area==='metro' ? 'Metro Vancouver' : 'Downtown peninsula';
+  if (area !== curArea){
+    curArea = area;
+    if (!Q.get('zoom') && AREA_VIEW[area]){ const v=AREA_VIEW[area]; map.jumpTo(v); zoom=v.zoom; }
+  }
+}
 
 async function loadRun(id){
   const [meta, t, vol, sig] = await Promise.all([
@@ -121,8 +151,13 @@ async function loadRun(id){
     fetch(`/api/runs/${id}/volumes`).then(r=>r.json()),
     fetch(`/api/runs/${id}/signals-live`).then(r=>r.ok?r.json():{pos:{},changes:{}}).catch(()=>({pos:{},changes:{}})),
   ]);
+  await loadArea((meta.params && meta.params.area) || 'peninsula');
   begin = meta.params.begin ?? 25200; tMax = meta.stats.trajectory.t_max;
   vehicles = meta.stats.trajectory.vehicles; trips = t; volMap = vol;
+  // adaptive flow scale: the 92nd-percentile edge volume maps to "busy" (red),
+  // so the ramp works for both peninsula (FCD counts) and metro (route counts)
+  const vv = Object.values(vol).sort((a,b)=>a-b);
+  volRef = vv.length ? Math.max(8, vv[Math.floor(vv.length*0.92)]) : 180;
   sigChangesMap = sig.changes || {};
   sigGroups = [];                                   // one indicator per approach (incoming edge)
   const sp = sig.pos || {}, se = sig.edges || {};
@@ -194,15 +229,13 @@ function updateScenarioStatus(){
 }
 
 async function init(){
-  const [zones, net, transit, runs] = await Promise.all([
-    fetch('/api/zones').then(r=>r.json()), fetch('/api/network').then(r=>r.json()),
-    fetch('/api/transit').then(r=>r.json()), fetch('/api/runs').then(r=>r.json()),
-  ]);
-  roads=net; transitGeo=transit; runsList=runs;
-  zonesPoly = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
-  gateways = zones.features.filter(f=>f.properties.is_gateway);
-  const sel = document.getElementById('scenario');
-  sel.innerHTML = runs.map(r=>`<option value="${r.run_id}">${(r.params&&r.params.name)||('run '+r.run_id)}</option>`).join('');
+  const runs = await fetch('/api/runs').then(r=>r.json());
+  runsList = runs;
+  const sel = document.getElementById('runsel');
+  sel.innerHTML = runs.map(r=>{
+    const p=r.params||{}, tag=p.area==='metro'?'metro':'peninsula';
+    return `<option value="${r.run_id}">${p.name||('run '+r.run_id)} · ${tag}</option>`;
+  }).join('');
   sel.onchange = async e => { await loadRun(+e.target.value); render(); };
   const wantRun = +Q.get('run') || (runs[0]?.run_id ?? 1);
   sel.value = wantRun;
@@ -231,12 +264,12 @@ function interpAt(t){
 // ---- layers --------------------------------------------------------------
 function layers(){
   const t=Math.min(tMax,T), flow=zoom<LOD_Z, L=[];
-  if (show.zones){ const op = zoom>=15 ? 0.32 : zoom>=13.5 ? 0.6 : 1.0;
+  if (show.zones && zonesPoly){ const op = zoom>=15 ? 0.32 : zoom>=13.5 ? 0.6 : 1.0;
     L.push(new deck.GeoJsonLayer({ id:'zones', data:zonesPoly, filled:true, stroked:false, opacity:op,
       getFillColor:f=>ZCOL[f.properties.land_use]||[130,130,130,55], parameters:{depthTest:false} })); }
   if (show.roads) L.push(new deck.GeoJsonLayer({ id:'roads', data:roads, stroked:true, filled:false,
     getLineColor: flow ? f=>volColor(volMap[f.properties.id]) : f=>RCOL[f.properties.class]||RCOL.local,
-    getLineWidth: flow ? f=>0.6+3.4*Math.min(1,(volMap[f.properties.id]||0)/120) : f=>(RW[f.properties.class]||0.5)*(zoom<12?0.6:1),
+    getLineWidth: flow ? f=>0.6+3.4*Math.min(1,(volMap[f.properties.id]||0)/volRef) : f=>(RW[f.properties.class]||0.5)*(zoom<12?0.6:1),
     lineWidthUnits:'pixels', lineWidthMinPixels:0.4, updateTriggers:{getLineColor:flow, getLineWidth:flow}, parameters:{depthTest:false} }));
   if (show.transit && transitGeo) L.push(new deck.GeoJsonLayer({ id:'transit', data:transitGeo, stroked:true, filled:false,
     getLineColor:TRANSIT_COL, getLineWidth:1, lineWidthUnits:'pixels', lineWidthMinPixels:0.7, parameters:{depthTest:false} }));

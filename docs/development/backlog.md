@@ -8,7 +8,7 @@ Future features, ideas, and deferred work that surface during development. Items
 
 - **Live simulation over WebSockets.** Drive SUMO live via TraCI and stream FCD to the browser in real time (v1 is batch-then-replay).
 - **Live data feeds.** TransLink GTFS-Realtime v3 (vehicle positions, alerts) and DriveBC Open511 as *live* inputs, not just scenario seeds. Requires the free TransLink API key.
-- **Region-wide coverage.** Expand from the downtown peninsula to full Metro Vancouver — mesoscopic for the region with microscopic focus areas, LOD switching between them.
+- **Region-wide coverage.** *(Phase 7 — started 2026-06-01: a mesoscopic core-Metro network + census run replays as regional flow ribbons.)* Remaining: full GVRD extent (Langley/Maple Ridge/Pitt Meadows east, White Rock/Tsawwassen south); **LOD hand-off** between the meso region and the micro peninsula focus area (run both, switch by zoom); metro **calibration** against regional screenlines; **regional transit** (GTFS over the metro net) and **finer demand** (sub-municipal TAZ rather than municipality centroids).
 - **Multiple day-types.** Weekend and seasonal profiles in addition to a representative weekday.
 - **Multi-day / week simulation.** Chain days; carry over patterns.
 - **Weather / event scenarios.** Rain slowdowns, special events (stadium egress), construction seasons.

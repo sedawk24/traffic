@@ -36,6 +36,7 @@ def run(
     closure_edge: str | None = None,
     closure_start: int = 0,
     closure_end: int = 0,
+    meso: bool = False,
 ) -> None:
     import libsumo
     import sumolib
@@ -81,12 +82,18 @@ def run(
         "--no-warnings",
         "true",
     ]
+    if meso:
+        # Mesoscopic (queue-based) for the regional scale; sample FCD coarsely
+        # since the regional view renders aggregated flow, not individual cars.
+        cmd += ["--mesosim", "--device.fcd.period", "10"]
     if add_files:
         cmd += ["-a", ",".join(add_files)]
     libsumo.start(cmd)
 
-    # static signal geometry (stop-line per movement) + approach edge
-    ids = libsumo.trafficlight.getIDList()
+    # static signal geometry (stop-line per movement) + approach edge. Skipped
+    # for meso: thousands of regional TLS aren't shown at regional zoom and the
+    # per-step capture would dominate runtime + trace size.
+    ids = [] if meso else libsumo.trafficlight.getIDList()
     pos, edges = {}, {}
     for t in ids:
         stoplines, es = [], []
@@ -149,4 +156,5 @@ if __name__ == "__main__":
         None if a[9] == "-" else a[9],
         int(a[10]),
         int(a[11]),
+        meso=len(a) > 12 and a[12] == "1",
     )

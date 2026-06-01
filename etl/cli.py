@@ -78,6 +78,13 @@ def build_parser() -> argparse.ArgumentParser:
     for name in STEPS:
         step_p = sub.add_parser(name, help=f"run the {name} loader")
         step_p.add_argument("--refresh", action="store_true", help="re-download source data")
+        if name == "network":
+            step_p.add_argument(
+                "--area",
+                choices=["peninsula", "metro"],
+                default="peninsula",
+                help="study area: peninsula (micro) or metro (meso, major roads)",
+            )
     return parser
 
 

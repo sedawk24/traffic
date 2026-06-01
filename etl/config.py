@@ -54,6 +54,22 @@ CORDON_POLYGON: list[tuple[float, float]] = [
 
 WGS84 = "EPSG:4326"
 
+# --- Metro-wide study area (Phase 7) -----------------------------------------
+# Core urbanized Metro Vancouver (Greater Vancouver RD). (W, S, E, N) in WGS84,
+# spanning the North Shore, Vancouver/UBC, Richmond + airport, Burnaby, New West,
+# the Tri-Cities, and north Surrey/Delta — with the major regional crossings
+# (Lions Gate, Ironworkers, Knight/Oak/Laing, Queensborough, Pattullo, Alex
+# Fraser, Massey, Port Mann). Run mesoscopically; the major road network only.
+METRO_BBOX: tuple[float, float, float, float] = (-123.28, 49.00, -122.70, 49.37)
+# OSM highway types kept for the regional meso net (arterials + highways). Minor
+# residential streets are dropped — regional demand loads onto the arterial grid,
+# which is standard for a mesoscopic regional model and keeps the net tractable.
+METRO_ROAD_TYPES = [
+    "motorway", "motorway_link", "trunk", "trunk_link",
+    "primary", "primary_link", "secondary", "secondary_link",
+    "tertiary", "tertiary_link",
+]
+
 # --- Open-data source registry (cited by loaders in the `sources` table) ------
 # Verified in docs/research/data-sources.md (2026-05-31). Attribution required.
 SOURCES: dict[str, dict[str, str]] = {

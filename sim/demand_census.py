@@ -337,7 +337,7 @@ def build_demand(
     return out_routes
 
 
-def _assign(net, trips, out_routes: Path) -> None:
+def _assign(net, trips, out_routes: Path, net_name: str = "peninsula") -> None:
     """Write a trips file (+ vTypes) and route it with duarouter."""
     out_routes.parent.mkdir(parents=True, exist_ok=True)
     vtypes = out_routes.with_name("census_vtypes.add.xml")
@@ -354,7 +354,7 @@ def _assign(net, trips, out_routes: Path) -> None:
     cmd = [
         str(config.sumo_bin("duarouter")),
         "-n",
-        str(config.SUMO_DIR / "peninsula.net.xml"),
+        str(config.SUMO_DIR / f"{net_name}.net.xml"),
         "--route-files",
         str(trips_xml),
         "-a",

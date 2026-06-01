@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 6 (scale & calibrate) complete — simulated AM-peak bridge volumes match published counts at GEH < 5 across all five cordon screenlines. This was the final planned phase; the v1 vertical slice is feature-complete.**
+**Status: Phase 7 (metro-wide expansion) underway — a mesoscopic Greater Vancouver run (27k vehicles, 29.6k-edge regional net) replays in the browser as regional flow ribbons. All six original build phases (0–6) are complete; the calibrated peninsula vertical slice runs end to end.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -71,15 +71,22 @@ The model is now credible against real counts. The peninsula is cordoned at its 
 - **Result: 5/5 screenlines within GEH < 5 (mean GEH 1.22).** Calibration exposed the Phase-4 model over-routing the east viaduct and starving Lions Gate; fixed with **per-gateway demand weights** in `sim/demand_census.py` (scale-invariant split correction). Observed volumes correspond to a full-demand scale ~3.24 (≈18× the replay sub-sample) — full-real-demand microsim exceeds SUMO's single-core ceiling (the core constraint), so replay sub-samples while the split holds at any scale.
 - **Coverage (honest):** the five bridge gateways are calibrated; the diffuse East gateways, all internal links, and travel times (RTDS retired) are not. Low-confidence targets (Cambie, Burrard) are estimates pending verified MoTI/CoV counts.
 
+## Phase 7 — Metro-wide expansion (in progress)
+
+The peninsula stack stays microscopic; a second, coarser **metro** study area runs mesoscopically over core urbanized Greater Vancouver, selected per run.
+- **Network (`etl network --area metro`).** OSM via `osmGet.py` over `config.METRO_BBOX`, **major roads only** (`--road-types` motorway…tertiary), tiled (4) to clear Overpass limits → `netconvert` → `metro.net.xml`: **29,596 edges / 16,964 junctions / 4,777 signals** (vs the peninsula's 7,307).
+- **Demand (`sim/demand_metro.py`).** The StatCan CSD→CSD commuting OD becomes municipality-to-municipality trips — each Metro Van CSD has a centroid → a pool of nearby edges; out-of-bbox CSDs snap to the boundary as regional gateways. AM census curve + mirrored PM peak; `duarouter` assignment.
+- **Run (`sim run --demand metro`).** `metro.net.xml` with `--mesosim` (queue-based) and coarse FCD sampling; transit + per-signal capture skipped (not shown at regional zoom). A scale-0.15 AM peak = **27,241 vehicles, peak 3,043 active**, replaying as flow ribbons.
+- **Serve + view.** `/api/network?net=metro`; the viewer is now **area-aware** (loads each run's network per `params.area`, drops to a regional camera, renders flow ribbons with an adaptive per-run color scale). Per-edge volumes come from the route file for meso runs (the meso FCD carries no lane). Also fixed a duplicate-`id` bug that had left the run-selector dropdown inert.
+
 ## What Is In Progress
 
-Nothing actively in progress — Phase 6 is complete (exit gate met) and it was the **final planned phase**. The v1 vertical slice (data pipeline → census demand → SUMO run + scenarios → calibrated → browser replay) is feature-complete end to end.
+Phase 7 — the metro view is live. Next within the expansion: metro screenline **calibration**, regional **transit**, finer (sub-municipal) demand, and **LOD hand-off** between the meso region and the micro peninsula. See `docs/development/phases/phase-7.md`.
 
 ## What Is Next
 
-All six build phases (0–6) are complete. Remaining work is **post-v1 expansion**, tracked in `docs/development/backlog.md`:
-- **Region-wide coverage (stretch).** Expand from the peninsula to full Metro Vancouver — mesoscopic region + microscopic focus areas with LOD switching.
-- **Stronger calibration.** Replace estimated Cambie/Burrard AADT with verified MoTI TRADAS / CoV station counts; add `routeSampler.py` demand fitting and corridor travel-time checks; per-link (not just screenline) coverage.
+- **Metro calibration & refinement.** Generalize the peninsula GEH method to regional screenlines (MoTI bridge/highway counts); sub-municipal TAZ demand; regional GTFS transit.
+- **Stronger peninsula calibration.** Verified MoTI TRADAS / CoV counts for Cambie/Burrard; `routeSampler.py` fitting; corridor travel-time checks.
 - **Live data + richer scenarios.** GTFS-Realtime / DriveBC as live feeds; click-to-place accidents/closures; weather/event scenarios.
 
 ## Key References
@@ -93,4 +100,4 @@ All six build phases (0–6) are complete. Remaining work is **post-v1 expansion
 
 ---
 
-*Last updated: 2026-06-01 (Phase 6 — calibration)*
+*Last updated: 2026-06-01 (Phase 7 — metro-wide expansion)*
