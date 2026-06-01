@@ -28,6 +28,30 @@ ZONES_DIR = DATA_DIR / "zones"
 # Dr). The exact cordon is trimmed during the manual netedit cleanup (Task 1).
 PENINSULA_BBOX: tuple[float, float, float, float] = (-123.170, 49.262, -123.080, 49.320)
 
+# Peninsula cordon polygon (clockwise), WGS84 (lon, lat). Traces the shoreline
+# out over the water and crosses each bridge at its cut point — Lions Gate /
+# Stanley Park Causeway (NW), and Burrard / Granville / Cambie across False Creek
+# (S) — with an east land screenline at ~Clark Dr. Fed to netconvert's
+# --keep-edges.in-geo-boundary to trim the raw OSM net down to the peninsula.
+# Edit these vertices to refine the cordon.
+CORDON_POLYGON: list[tuple[float, float]] = [
+    (-123.144, 49.321),  # Lions Gate cut (First Narrows, N of Prospect Point)
+    (-123.118, 49.307),  # inlet, NE of Brockton Point
+    (-123.108, 49.300),  # inlet N of Coal Harbour
+    (-123.098, 49.296),  # inlet N of Canada Place / Gastown
+    (-123.085, 49.294),  # inlet NE near CRAB Park / port
+    (-123.080, 49.288),  # NE corner (~Clark Dr at the waterfront)
+    (-123.080, 49.273),  # E screenline (~Clark Dr) down to the False Creek head
+    (-123.098, 49.270),  # head of False Creek (Science World)
+    (-123.108, 49.269),  # Cambie Bridge cut
+    (-123.130, 49.269),  # Granville Bridge cut
+    (-123.142, 49.270),  # Burrard Bridge cut (toward Kits Point)
+    (-123.150, 49.283),  # English Bay, W of the West End shore
+    (-123.156, 49.298),  # Stanley Park W shore (Third Beach)
+    (-123.160, 49.307),  # Stanley Park NW (Siwash Rock)
+    (-123.150, 49.316),  # approach to Prospect Point
+]
+
 WGS84 = "EPSG:4326"
 
 # --- Open-data source registry (cited by loaders in the `sources` table) ------
@@ -90,3 +114,8 @@ def sumo_bin(name: str) -> Path:
 def sumo_tool(rel: str) -> Path:
     """Absolute path to a SUMO python tool (e.g. ``osmGet.py``)."""
     return sumo_home() / "tools" / rel
+
+
+def cordon_geo_boundary() -> str:
+    """``CORDON_POLYGON`` as the flat ``lon,lat,...`` CSV netconvert expects."""
+    return ",".join(f"{lon},{lat}" for lon, lat in CORDON_POLYGON)

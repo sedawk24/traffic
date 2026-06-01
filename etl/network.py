@@ -59,7 +59,7 @@ def _netconvert_args(osm_path: Path, net_path: Path) -> list[str]:
     type_files = ",".join(
         str(typemap / t) for t in ("osmNetconvert.typ.xml", "osmNetconvertUrbanDe.typ.xml")
     )
-    return [
+    args = [
         "--osm-files",
         str(osm_path),
         "--type-files",
@@ -106,6 +106,17 @@ def _netconvert_args(osm_path: Path, net_path: Path) -> list[str]:
         "--output.original-names",
         "true",
     ]
+    # Cordon trim: keep only edges inside the peninsula polygon, then the largest
+    # connected component — drops the across-water spillover (North Shore, Kits,
+    # Mount Pleasant) and the stray long ways the generous bbox pulled in.
+    if config.CORDON_POLYGON:
+        args += [
+            "--keep-edges.in-geo-boundary",
+            config.cordon_geo_boundary(),
+            "--keep-edges.components",
+            "1",
+        ]
+    return args
 
 
 def build_net(osm_path: Path) -> tuple[Path, list[str]]:

@@ -53,7 +53,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | OSM → SUMO `.net.xml` for the peninsula (cordon at bridges) | In Progress | Automated `etl network` done (15,598 edges / 473 TLS, UTM-10 geo); manual netedit cordon cleanup pending |
+| 1 | OSM → SUMO `.net.xml` for the peninsula (cordon at bridges) | In Progress | `etl network` + automated cordon trim done (7,307 edges / 266 TLS, UTM-10 geo; trimmed at the bridges to the peninsula); fine netedit cleanup (connectivity/lanes/gateways) pending |
 | 2 | Capture network edits as netdiff | Not Started | Survive OSM re-import |
 | 3 | TransLink GTFS static → SUMO pt (bus + rail) | Not Started | gtfs2pt.py |
 | 4 | StatCan 98-10-0459 OD + 98-10-0458 departure profiles → SQLite | Not Started | Open Licence |
@@ -67,7 +67,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 |-------|--------|-------|
 | ETL re-run produces identical DB (idempotent) | Partial | Harness in place (CREATE IF NOT EXISTS + natural-key upserts); content idempotent, audit `fetched_at` intentionally volatile |
 | OD totals reconcile with census source | Pending | Census loader not yet built |
-| Network opens cleanly in netedit; bridges/gateways present | Partial | Reads cleanly via sumolib; netedit cordon cleanup of bridges/gateways pending |
+| Network opens cleanly in netedit; bridges/gateways present | Partial | Cordon-trimmed; reads cleanly via sumolib with bridge gateway stubs present; fine netedit pass (connectivity/lanes/gateway tagging) pending |
 | Zone polygons render with land-use classes | Pending | |
 
 ---
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-05-31 | 1 | **Automated cordon trim.** Added `config.CORDON_POLYGON` + netconvert `--keep-edges.in-geo-boundary` & `--keep-edges.components 1` to `etl network`; trims the raw OSM net at the bridges to the peninsula (15,598 → 7,307 edges; verified geo extent lon[−123.16,−123.08] lat[49.27,49.32], with downtown/Stanley Park in and Kitsilano/North Van out). Added geo/ETL deps (geopandas, pandas, shapely, pyproj, requests). |
 | 2026-05-31 | 1 | **Phase 1 started.** Built the ETL backbone: `etl/` package with SQLite schema (`schema.sql`, 12 tables), idempotent CLI (`python -m etl`: init-db/network/zoning/census/transit/signals/events/all/status), open-data source registry, and loader stubs; added `ruff` dev dep (checks pass). Implemented `etl network`: OSM via SUMO `osmGet.py` → `netconvert` → `data/sumo/peninsula.net.xml` (15,598 edges / 6,593 junctions / 473 TLS; UTM-10 geo-projection stored). Provenance + net metadata recorded in `data/traffic.db`. Manual netedit cordon cleanup + zoning/census/transit/signals/events loaders pending. |
 | 2026-05-31 | 0 | **Phase 0 complete.** SUMO 1.27 + libsumo verified on Apple Silicon via `uv`; FCD XML + Parquet and `--fcd-output.geo` confirmed; benchmark ~225k vehicle-updates/sec (~34× real-time at 8k active vehicles). Added pyproject.toml, uv.lock, scripts/phase0_spike.py. |
 | 2026-05-31 | 0 | Project planning complete; architecture + phased plan agreed. Phase 0 research verified (with corrections: RTDS retired, CoV counts not bulk, Trip Diary dashboard-only). Tracking files and research deliverables populated. |
