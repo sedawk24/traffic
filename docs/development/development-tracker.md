@@ -13,7 +13,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 2 | End-to-end vertical slice (tracer bullet) | Complete |
 | 3 | Visualization (clean cartographic + icons) | Complete |
 | 4 | Demand modeling (realistic) | Complete |
-| 5 | Scenarios (accident / closure injection) | Not Started |
+| 5 | Scenarios (accident / closure injection) | Complete |
 | 6 | Scale & calibrate (best-effort quantitative) | Not Started |
 
 **v1 north star:** a polished, fully-working vertical slice on the **downtown Vancouver peninsula** (cordoned at the bridges). Region-wide coverage is a later expansion, not a v1 gate.
@@ -134,22 +134,22 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
-## Phase 5: Scenarios (Not Started)
+## Phase 5: Scenarios (Complete)
 
 ### Tasks
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 1 | TraCI mid-run injection: close edge/lane, stop vehicle, drop speed | Not Started | |
-| 2 | Reroute affected traffic | Not Started | |
-| 3 | DriveBC Open511 closure library | Not Started | Highways/bridges |
-| 4 | Before/after UI: baseline vs scenario, delta metrics | Not Started | Travel time, queue, throughput |
+| 1 | TraCI mid-run injection: close edge/lane, stop vehicle, drop speed | Done (closure) | `sim/librun.py`: disallow an edge's lanes at the event time (+ reopen). Accident (stop-vehicle) + speed-drop are the same TraCI pattern → backlog |
+| 2 | Reroute affected traffic | Done | `--device.rerouting` on all vehicles; closing the Granville edge vacated it (200→2 after 08:00) and traffic redistributed |
+| 3 | DriveBC Open511 closure library | Done | Seeded in Phase 1 (`etl events`): 5 canonical bridge closures wired to real edges + live DriveBC events |
+| 4 | Before/after UI: baseline vs scenario, delta metrics | Done | Run selector + scenario panel: Δ avg travel / avg wait / trips-done vs a matched baseline; closed edge highlighted (✕) on the map |
 
 ### Verification
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Inject closure → observe rerouting + before/after deltas | Pending | "Close Lions Gate Bridge" demo |
+| Inject closure → observe rerouting + before/after deltas | Done | Granville closure: edge vacated 200→2, traffic reroutes; UI shows Δ +14 s travel, +14 s wait, −96 trips vs baseline |
 
 ---
 
@@ -177,6 +177,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 5 | **Phase 5 complete — closure injection + before/after; exit gate met.** Unified the run path into `sim/librun.py` (one libsumo process → geo FCD + per-approach signals + tripinfo, with optional mid-run **closure**: disallow an edge's lanes at the event time, with `--device.rerouting` so traffic redistributes). `sim run --scenario close_<bridge>`; runs register their scenario + metrics. Viewer: scenario panel with Δ avg travel / wait / trips-done vs a matched baseline + the closed edge highlighted (✕). Demo: closing Granville vacated the bridge (200→2 after 08:00), rerouted traffic, +14 s travel/wait, −96 trips. Replaced run.py + tlscapture.py with librun. Accident/speed-drop primitives + click-to-place authoring → backlog. |
 | 2026-06-01 | 4 | **Phase 4 complete — census demand; exit gate met.** `sim/demand_census.py` turns the SQLite OD (98-10-0459) + departure profiles (98-10-0458) + land-use zones into SUMO routes for a representative weekday: edge↔zone sjoin + emp/pop weights, external origins → directional bridge gateways, census AM departure curve (+ synthetic PM), car-mode-share scaling, and synthesized non-work/delivery/truck demand; duarouter assignment. `sim run --demand census`. Verified: AM departure shape matches census; full-day sim is bimodal (AM ~801 / PM ~946 active); gateway volumes east > south > Lions Gate (matches the OD). Fixed `trace._classify` for non-string vTypes. duaIterate + tls tuning → backlog. |
 | 2026-06-01 | 3 | **Signals: one indicator per approach (review).** Per-movement dots (3 per approach) read as confusing clutter. `tlscapture` now records each movement's incoming approach edge; the viewer groups movements by edge and shows a single green/yellow/red dot per approach (green if any movement is green, else yellow, else red), positioned at the approach's stop line — a normal traffic-light read. |
 | 2026-06-01 | 3 | **Signal-dot styling fix (review).** Signal markers used deck's default 1-*metre* stroke, so the ring ballooned to a solid black dot when zoomed in. Switched to a thin pixel-based white halo + radius that scales with zoom (clamped) — colour now reads clearly at street zoom. |

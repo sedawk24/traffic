@@ -12,7 +12,7 @@ Future features, ideas, and deferred work that surface during development. Items
 - **Multiple day-types.** Weekend and seasonal profiles in addition to a representative weekday.
 - **Multi-day / week simulation.** Chain days; carry over patterns.
 - **Weather / event scenarios.** Rain slowdowns, special events (stadium egress), construction seasons.
-- **Richer scenario authoring.** UI to place accidents/closures by clicking the map; schedule timed events.
+- **Richer scenario authoring.** UI to place accidents/closures by clicking the map; schedule timed events. Add the remaining injection primitives (stop-a-vehicle "accident", link speed-drop) alongside the edge closure; pick a scenario from the viewer (currently a CLI flag).
 - **Transit ridership modeling.** Board/alight loads and crowding, not just vehicles running to schedule.
 - **Stylized "SimCity" sprite skin.** Optional game-like art layer (would evaluate PixiJS or custom deck.gl icons) on top of the clean cartographic base.
 - **Scenario library & sharing.** Save, name, and compare many scenarios; export before/after reports.

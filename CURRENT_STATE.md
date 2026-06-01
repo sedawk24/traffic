@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 4 (demand modeling) complete — census-driven demand with a realistic AM-in/PM-out rhythm, mode split, and freight. Phase 5 (scenarios) is next.**
+**Status: Phase 5 (scenarios) complete — mid-run bridge-closure injection with rerouting + before/after deltas in the UI. Phase 6 (scale & calibrate) is next.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -57,13 +57,17 @@ Deferred: self-hosted PMTiles basemap (offline/no-cloud) → backlog (no tooling
 - **Freight + non-work:** synthesized midday non-work + delivery-van + heavy-truck demand (vTypes car/hov/delivery/truck).
 - **Assignment:** `duarouter`. Verified: AM departure shape matches census; the full-day sim is **bimodal** (AM ~801 @ 08:00, PM ~946 @ 17:00 active); gateway volumes east > south > Lions Gate, matching the OD.
 
+## Phase 5 — Scenarios (complete)
+
+`sim/librun.py` unifies the run into one libsumo process (geo FCD + per-approach signals + tripinfo) and can inject a **mid-run closure** — disallow a bridge edge's lanes at the event time, with rerouting devices so traffic redistributes. `sim run --scenario close_<bridge>`. The viewer's run selector picks a run; a **scenario panel** shows Δ avg travel / wait / trips-done vs a matched baseline and **highlights the closed edge** (✕). Demo: closing Granville at 08:00 vacated the bridge (200→2 vehicles) and rerouted traffic (+14 s travel/wait, −96 trips). The closure library (5 bridges) was seeded in Phase 1.
+
 ## What Is In Progress
 
-Nothing actively in progress — Phase 4 is complete (exit gate met). Ready to begin **Phase 5 (scenarios)**: TraCI accident/closure injection with before/after impact (the closure scenario library + bridge edges are already seeded).
+Nothing actively in progress — Phase 5 is complete (exit gate met). Ready to begin **Phase 6 (scale & calibrate)**: best-effort quantitative calibration against obtainable counts, and expanding outward from the peninsula.
 
 ## What Is Next
 
-- **Phase 5 — Scenarios (next).** Accident/closure injection via TraCI; before/after impact in the UI.
+- **Phase 6 — Scale & calibrate (next).** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.
 - **Phase 4 — Demand modeling.** Real census-driven OD, stochastic departures by mode, commercial/delivery/truck traffic.
 - **Phase 5 — Scenarios.** Accident/closure injection via TraCI; before/after impact in the UI.
 - **Phase 6 — Scale & calibrate.** Best-effort quantitative calibration against obtainable counts; expand outward from the peninsula.
