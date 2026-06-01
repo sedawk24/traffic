@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 2 (end-to-end vertical slice) complete — the full chain runs (SUMO → trace → FastAPI/Arrow → deck.gl viewer); a real run replays in the browser. Phase 3 (visualization) is next.**
+**Status: Phase 3 (visualization) in progress — polished viewer: animated comet-trails by vehicle type, land-use zones, styled roads, labelled bridges, legend + controls.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -40,7 +40,7 @@ The full chain runs end to end and the **key gate is met** (a real SUMO run repl
 
 ## What Is In Progress
 
-Nothing actively in progress — Phase 2 is complete (key gate met). Ready to begin **Phase 3 (visualization)**: PMTiles basemap, polished cartography, vehicle icons by type, LOD, smooth zoom.
+**Phase 3 — Visualization.** First increment done: the viewer (`web/index.html`) is rebuilt on MapLibre positron + deck.gl with an animated **`TripsLayer`** comet-trail per vehicle coloured by type (car/bus), a refined land-use zone palette + **legend**, roads styled by class, **labelled bridge gateways**, a **run selector**, speed control, **layer toggles**, and a time-of-day clock. Backend gained `/api/runs/{id}/trips` (per-vehicle paths) and a road `class` on `/api/network`. Remaining in Phase 3: glyph vehicle icons, transit route lines, explicit region→street LOD (flow ribbons → icons), and self-hosted PMTiles for an offline basemap.
 
 ## What Is Next
 

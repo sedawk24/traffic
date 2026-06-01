@@ -2,7 +2,7 @@
 
 **Goal:** Make the replay beautiful and legible — the bespoke value of the project. Visual direction: clean cartographic basemap with crisp zones, styled network, and vehicle icons distinct by type.
 
-**Status:** Not Started.
+**Status:** In Progress — polished viewer done (TripsLayer comet-trails by type, land-use zones + legend, classed roads, labelled bridge gateways, run/speed selectors, layer toggles, clock). Remaining: glyph vehicle icons, transit route lines, explicit region→street LOD, self-hosted PMTiles.
 
 ## Tasks
 

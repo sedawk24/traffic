@@ -45,13 +45,16 @@ def _ensure_network_geojson() -> Path:
         if e.getID().startswith(":"):
             continue
         coords = [list(net.convertXY2LonLat(x, y)) for x, y in e.getShape()]
+        spd = e.getSpeed()
+        klass = "arterial" if spd >= 16 else "collector" if spd >= 11 else "local"
         features.append(
             {
                 "type": "Feature",
                 "properties": {
                     "id": e.getID(),
                     "lanes": e.getLaneNumber(),
-                    "speed": round(e.getSpeed(), 1),
+                    "speed": round(spd, 1),
+                    "class": klass,
                 },
                 "geometry": {"type": "LineString", "coordinates": coords},
             }
@@ -114,6 +117,31 @@ def run_trace(
     with pa.ipc.new_stream(sink, table.schema) as writer:
         writer.write_table(table)
     return Response(content=sink.getvalue().to_pybytes(), media_type=ARROW_MEDIA)
+
+
+@app.get("/api/runs/{run_id}/trips")
+def run_trips(run_id: int, every: int = Query(3, ge=1, description="sample every Nth second")) -> Response:
+    """Per-vehicle paths + timestamps for a deck.gl TripsLayer (animated trails)."""
+    import pandas as pd
+
+    r = _run_row(run_id)
+    path = r["trace_path"]
+    if not path or not Path(path).exists():
+        raise HTTPException(404, "trace file missing")
+    df = pd.read_parquet(path, columns=["t", "id", "cls", "lon", "lat"])
+    if every > 1:
+        df = df[df["t"] % every == 0]
+    df = df.sort_values(["id", "t"])
+    trips = [
+        {
+            "cls": str(g["cls"].iloc[0]),
+            "path": g[["lon", "lat"]].round(6).values.tolist(),
+            "timestamps": g["t"].astype(int).tolist(),
+        }
+        for _, g in df.groupby("id", sort=False)
+        if len(g) > 1
+    ]
+    return Response(json.dumps(trips), media_type="application/json")
 
 
 @app.get("/api/network")

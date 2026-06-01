@@ -3,129 +3,178 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Greater Vancouver Traffic Simulator — Phase 2 tracer bullet</title>
+<title>Greater Vancouver Traffic Simulator</title>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="https://unpkg.com/deck.gl@9.0.38/dist.min.js"></script>
 <style>
-  html, body { margin: 0; height: 100%; background: #0b0f14; font-family: system-ui, sans-serif; }
-  #map { position: absolute; inset: 0; }
-  #panel {
-    position: absolute; left: 12px; bottom: 12px; right: 12px; z-index: 5;
-    background: rgba(16,22,30,.86); color: #dfe7ef; border: 1px solid #2a3744;
-    border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 14px;
-    backdrop-filter: blur(6px);
-  }
-  #panel button { background:#1f6feb; color:#fff; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px; }
+  :root { --panel: rgba(17,23,31,.88); --line:#2b3a49; --ink:#e6edf4; --muted:#9fb0c0; }
+  html,body { margin:0; height:100%; background:#0a0e13; font-family:system-ui,-apple-system,sans-serif; color:var(--ink); }
+  #map { position:absolute; inset:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; backdrop-filter:blur(8px); }
+  #title { position:absolute; top:12px; left:12px; z-index:5; padding:8px 13px; font-size:13px; }
+  #title b { font-size:14px; } #title .sub { color:var(--muted); }
+  #legend { position:absolute; top:12px; right:12px; z-index:5; padding:10px 13px; font-size:12px; max-width:215px; }
+  #legend h4 { margin:2px 0 6px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  #legend .row { display:flex; align-items:center; gap:7px; margin:3px 0; }
+  #legend .row + h4 { margin-top:10px; }
+  .sw { width:13px; height:13px; border-radius:3px; flex:none; }
+  .swl { width:16px; height:4px; border-radius:2px; flex:none; }
+  #panel { position:absolute; left:12px; right:12px; bottom:12px; z-index:5; padding:10px 14px;
+           display:flex; align-items:center; gap:14px; }
+  #panel button { background:#1f6feb; color:#fff; border:0; border-radius:6px; padding:7px 13px; cursor:pointer; font-size:14px; }
   #panel button:hover { background:#3b82f6; }
-  #scrub { flex: 1; }
-  #clock { font-variant-numeric: tabular-nums; font-size: 18px; min-width: 92px; }
-  #stat { font-size: 12px; color: #93a4b5; min-width: 150px; }
-  select { background:#11161d; color:#dfe7ef; border:1px solid #2a3744; border-radius:6px; padding:5px; }
-  #title { position:absolute; top:12px; left:12px; z-index:5; color:#dfe7ef; background:rgba(16,22,30,.8);
-           padding:6px 12px; border-radius:8px; font-size:13px; border:1px solid #2a3744; }
-  #loading { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:6;
-             color:#dfe7ef; background:rgba(16,22,30,.9); padding:14px 20px; border-radius:8px; }
+  #scrub { flex:1; accent-color:#3b82f6; }
+  #clock { font-variant-numeric:tabular-nums; font-size:19px; min-width:96px; }
+  #stat { font-size:12px; color:var(--muted); min-width:120px; text-align:right; }
+  select { background:#0e141b; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px; }
+  .toggles { display:flex; gap:10px; font-size:12px; color:var(--muted); }
+  .toggles label { display:flex; align-items:center; gap:4px; cursor:pointer; }
+  #loading { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:6; padding:14px 20px; }
 </style>
 </head>
 <body>
 <div id="map"></div>
-<div id="title">Downtown Vancouver peninsula · baseline run · <span id="vcount">0</span> vehicles</div>
-<div id="loading">Loading network, zones &amp; trace…</div>
-<div id="panel">
+<div id="title" class="card"><b>Greater Vancouver Traffic Simulator</b><br>
+  <span class="sub">Downtown peninsula · <span id="runname">baseline</span> · <span id="vcount">0</span> vehicles</span></div>
+<div id="legend" class="card"></div>
+<div id="loading" class="card">Loading network, zones &amp; trace…</div>
+<div id="panel" class="card">
   <button id="play">⏸ Pause</button>
   <span id="clock">07:00:00</span>
   <input id="scrub" type="range" min="0" max="100" value="0" />
-  <label>speed <select id="speed">
-    <option value="10">10×</option><option value="30" selected>30×</option>
-    <option value="60">60×</option><option value="120">120×</option>
-  </select></label>
+  <label style="font-size:12px;color:var(--muted)">run <select id="scenario"></select></label>
+  <label style="font-size:12px;color:var(--muted)">speed <select id="speed">
+    <option value="15">15×</option><option value="30" selected>30×</option>
+    <option value="60">60×</option><option value="120">120×</option></select></label>
+  <span class="toggles" id="toggles"></span>
   <span id="stat">—</span>
 </div>
 
 <script type="module">
 import * as Arrow from 'https://esm.sh/apache-arrow@17';
 
+// ---- palettes ------------------------------------------------------------
+const VCOL = { car:[40,150,245], bus:[255,142,28], truck:[150,92,60], rail:[200,70,200] };
 const ZCOL = {
-  'residential':[104,159,114,150], 'commercial':[74,127,196,150],
-  'industrial':[176,134,92,150], 'parkland':[88,166,96,160],
-  'downtown-core':[150,112,190,160], 'gateway':[230,90,90,210],
+  'residential':[122,176,134,75], 'commercial':[86,150,210,75], 'industrial':[201,160,109,85],
+  'parkland':[116,188,120,95], 'downtown-core':[170,128,202,90],
 };
-const speedColor = s => { const x=Math.max(0,Math.min(1,s/14));
-  return [Math.round(235-205*x), Math.round(70+150*x), 70, 235]; };
-const hms = sec => { const h=(Math.floor(sec/3600)%24).toString().padStart(2,'0');
-  const m=(Math.floor(sec/60)%60).toString().padStart(2,'0'); const s=(Math.floor(sec)%60).toString().padStart(2,'0');
-  return `${h}:${m}:${s}`; };
+const RCOL = { arterial:[64,76,92,230], collector:[110,124,140,175], local:[164,176,190,120] };
+const RW   = { arterial:2.4, collector:1.2, local:0.55 };
+const ZONE_LABELS = { 'downtown-core':'Downtown core', residential:'Residential', commercial:'Commercial',
+  industrial:'Industrial', parkland:'Parkland' };
+const css = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 
-const map = new maplibregl.Map({
-  container:'map', style:'https://tiles.openfreemap.org/styles/positron',
-  center:[-123.12, 49.288], zoom:12.4, pitch:0,
-});
+const hms = sec => { const f=n=>String(Math.floor(n)).padStart(2,'0');
+  return `${f(sec/3600%24)}:${f(sec/60%60)}:${f(sec%60)}`; };
+
+// ---- map -----------------------------------------------------------------
+const map = new maplibregl.Map({ container:'map', style:'https://tiles.openfreemap.org/styles/positron',
+  center:[-123.115,49.283], zoom:12.5, pitch:0, attributionControl:false });
 const overlay = new deck.MapboxOverlay({ interleaved:false, layers:[] });
 map.addControl(overlay);
+
+// ---- state ---------------------------------------------------------------
+let T=300, tMax=0, begin=25200, playing=true, speed=30, last=0, zoom=12.5;
+let trips=[], zonesPoly=null, gateways=[], roads=null, vehicles=0;
+const show = { zones:true, roads:true, trails:true, labels:true };
+
 init().catch(e => { const l=document.getElementById('loading');
   if(l) l.textContent='init error: '+((e&&e.message)||e); console.error(e); });
 
-let T=300, tMax=0, begin=25200, playing=true, speed=30, last=0;
-let lon, lat, spd, frameStart, idxAll, N=0;
+async function loadRun(id){
+  const [meta, t] = await Promise.all([
+    fetch(`/api/runs/${id}/meta`).then(r=>r.json()),
+    fetch(`/api/runs/${id}/trips?every=3`).then(r=>r.json()),
+  ]);
+  begin = meta.params.begin ?? 25200; tMax = meta.stats.trajectory.t_max;
+  vehicles = meta.stats.trajectory.vehicles; trips = t;
+  document.getElementById('vcount').textContent = vehicles.toLocaleString();
+  document.getElementById('runname').textContent = meta.params.name ?? id;
+  document.getElementById('scrub').max = tMax;
+}
 
 async function init(){
-  const [zones, roads, meta, traceBuf] = await Promise.all([
+  const [zones, net, runs] = await Promise.all([
     fetch('/api/zones').then(r=>r.json()),
     fetch('/api/network').then(r=>r.json()),
-    fetch('/api/runs/1/meta').then(r=>r.json()),
-    fetch('/api/runs/1/trace').then(r=>r.arrayBuffer()),
+    fetch('/api/runs').then(r=>r.json()),
   ]);
-  begin = meta.params.begin ?? 25200;
-  tMax = meta.stats.trajectory.t_max;
-  document.getElementById('vcount').textContent = meta.stats.trajectory.vehicles.toLocaleString();
+  roads = net;
+  zonesPoly = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
+  gateways = zones.features.filter(f=>f.properties.is_gateway);
 
-  const table = Arrow.tableFromIPC(new Uint8Array(traceBuf));
-  const tArr = table.getChild('t').toArray();
-  lon = table.getChild('lon').toArray();
-  lat = table.getChild('lat').toArray();
-  spd = table.getChild('speed').toArray();
-  N = table.numRows;
-  idxAll = new Int32Array(N); for (let i=0;i<N;i++) idxAll[i]=i;
-  // rows are sorted by t -> contiguous buckets. frameStart[t] = first index with tArr>=t.
-  frameStart = new Int32Array(tMax+2);
-  let idx=0; for (let t=0;t<=tMax+1;t++){ while(idx<N && tArr[idx]<t) idx++; frameStart[t]=idx; }
+  const sel = document.getElementById('scenario');
+  sel.innerHTML = runs.map(r=>`<option value="${r.run_id}">${(r.params&&r.params.name)||('run '+r.run_id)}</option>`).join('');
+  sel.onchange = async e => { document.getElementById('loading')?.remove();
+    await loadRun(+e.target.value); render(); };
 
-  document.getElementById('scrub').max = tMax;
+  await loadRun(runs[0]?.run_id ?? 1);
+  buildLegend(); buildToggles();
   document.getElementById('loading').remove();
-  window._base = [
-    new deck.GeoJsonLayer({id:'zones', data:zones, filled:true, stroked:false,
-      getFillColor:f=>ZCOL[f.properties.land_use]||[120,120,120,90], pickable:false}),
-    new deck.GeoJsonLayer({id:'roads', data:roads, stroked:true, filled:false,
-      getLineColor:[120,135,150,170], lineWidthMinPixels:0.6, getLineWidth:1}),
-  ];
   render();
   requestAnimationFrame(tick);
 }
 
-function vehicleLayer(){
-  const t = Math.min(tMax, Math.floor(T));
-  const a = frameStart[t], b = frameStart[t+1];
-  const data = idxAll.subarray(a, b);
-  document.getElementById('stat').textContent = `${b-a} on-network · t+${t}s`;
-  return new deck.ScatterplotLayer({
-    id:'veh', data, getPosition:i=>[lon[i],lat[i]], getFillColor:i=>speedColor(spd[i]),
-    getRadius:18, radiusMinPixels:1.6, radiusMaxPixels:6, updateTriggers:{all:t},
-  });
+// ---- layers --------------------------------------------------------------
+function baseLayers(){
+  const L = [];
+  if (show.zones) L.push(new deck.GeoJsonLayer({ id:'zones', data:zonesPoly, filled:true, stroked:false,
+    getFillColor:f=>ZCOL[f.properties.land_use]||[130,130,130,60], pickable:false, parameters:{depthTest:false} }));
+  if (show.roads) L.push(new deck.GeoJsonLayer({ id:'roads', data:roads, stroked:true, filled:false,
+    getLineColor:f=>RCOL[f.properties.class]||RCOL.local,
+    getLineWidth:f=>(RW[f.properties.class]||0.6)*(zoom<12?0.6:1),
+    lineWidthUnits:'pixels', lineWidthMinPixels:0.4, parameters:{depthTest:false} }));
+  if (show.labels){
+    L.push(new deck.ScatterplotLayer({ id:'gw', data:gateways, getPosition:f=>f.geometry.coordinates,
+      getFillColor:[226,86,86], getRadius:6, radiusUnits:'pixels', stroked:true, getLineColor:[255,255,255],
+      lineWidthMinPixels:1.5 }));
+    L.push(new deck.TextLayer({ id:'gwl', data:gateways, getPosition:f=>f.geometry.coordinates,
+      getText:f=>f.properties.name||'', getSize:11, getColor:[40,46,54], getPixelOffset:[0,-13],
+      background:true, getBackgroundColor:[255,255,255,210], backgroundPadding:[4,2],
+      fontWeight:600, getTextAnchor:'middle' }));
+  }
+  return L;
+}
+function trailLayer(){
+  const t = Math.min(tMax, T);
+  return new deck.TripsLayer({ id:'trips', data:trips, getPath:d=>d.path, getTimestamps:d=>d.timestamps,
+    getColor:d=>VCOL[d.cls]||[150,150,150], currentTime:t, trailLength:150, fadeTrail:true,
+    widthUnits:'pixels', getWidth:3, widthMinPixels:1.6, widthMaxPixels:6, capRounded:true, jointRounded:true,
+    opacity:0.9 });
 }
 function render(){
-  overlay.setProps({layers:[...(window._base||[]), vehicleLayer()]});
+  overlay.setProps({ layers:[...baseLayers(), ...(show.trails?[trailLayer()]:[])] });
   document.getElementById('clock').textContent = hms(begin + T);
   document.getElementById('scrub').value = Math.floor(T);
+  document.getElementById('stat').textContent = `t+${Math.floor(T)}s of ${tMax}s`;
 }
 function tick(now){
-  if (playing && last){ T += (now-last)/1000*speed; if (T>=tMax){ T=0; } render(); }
+  if (playing && last){ T += (now-last)/1000*speed; if (T>=tMax) T=0; render(); }
   last = now; requestAnimationFrame(tick);
 }
+map.on('zoom', () => { zoom = map.getZoom(); });
 
-document.getElementById('play').onclick = e => {
-  playing=!playing; e.target.textContent = playing?'⏸ Pause':'▶ Play'; last=0;
-};
+// ---- legend + toggles ----------------------------------------------------
+function buildLegend(){
+  const veh = Object.entries(VCOL).filter(([k])=>['car','bus'].includes(k))
+    .map(([k,c])=>`<div class="row"><span class="sw" style="background:${css(c)}"></span>${k}</div>`).join('');
+  const zon = Object.keys(ZONE_LABELS)
+    .map(k=>`<div class="row"><span class="sw" style="background:${css(ZCOL[k])}"></span>${ZONE_LABELS[k]}</div>`).join('');
+  document.getElementById('legend').innerHTML =
+    `<h4>Vehicles (trail = recent path)</h4>${veh}<h4>Land use</h4>${zon}`+
+    `<div class="row" style="margin-top:8px;color:var(--muted)">● bridge gateways</div>`;
+}
+function buildToggles(){
+  document.getElementById('toggles').innerHTML = Object.keys(show)
+    .map(k=>`<label><input type="checkbox" data-k="${k}" ${show[k]?'checked':''}>${k}</label>`).join('');
+  document.querySelectorAll('#toggles input').forEach(cb => cb.onchange = e => {
+    show[e.target.dataset.k] = e.target.checked; render(); });
+}
+
+// ---- controls ------------------------------------------------------------
+document.getElementById('play').onclick = e => { playing=!playing; e.target.textContent=playing?'⏸ Pause':'▶ Play'; last=0; };
 document.getElementById('scrub').oninput = e => { T=+e.target.value; render(); };
 document.getElementById('speed').onchange = e => { speed=+e.target.value; };
 </script>
