@@ -24,7 +24,9 @@ The system architecture and phased build plan are agreed, Phase 0 research is wr
 
 - **Zoning (Task 5).** `etl zoning`: City of Vancouver zoning + parks (Explore API), clipped to the cordon and reclassified to {residential, commercial, industrial, parkland, downtown-core}, plus 6 virtual bridge-gateway zones → **366 zones** in `data/traffic.db` + `data/zones/zones.geojson` (252 downtown-core, 58 parkland incl. Stanley Park, 22 industrial, 21 residential, 7 commercial). Metro 2050 deferred to the region expansion; population/employment weights to Phase 4 (census).
 
-Remaining in Phase 1: fine `netedit` cleanup (bridge connectivity, lane counts, gateway tagging) + `netdiff` capture (Tasks 1–2), then the transit (3), census (4), and signals/DriveBC (6) loaders. See `docs/development/phases/phase-1.md`.
+- **Signals + events (Task 6).** `etl signals`: 254 CoV signal locations in the cordon, 247 matched to a SUMO traffic-light junction (<60 m). `etl events`: 5 canonical bridge-closure scenarios wired to net edges (Lions Gate/Burrard/Granville/Cambie/viaducts) + 6 live DriveBC events near the approaches.
+
+Remaining in Phase 1: fine `netedit` cleanup (bridge connectivity, lane counts, gateway tagging) + `netdiff` capture (Tasks 1–2), then the transit (3) and census (4) loaders. See `docs/development/phases/phase-1.md`.
 
 ## What Is Next
 
