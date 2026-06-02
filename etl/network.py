@@ -108,6 +108,12 @@ def _netconvert_args(osm_files: list[Path], net_path: Path, spec: dict) -> list[
     type_files = ",".join(
         str(typemap / t) for t in ("osmNetconvert.typ.xml", "osmNetconvertUrbanDe.typ.xml")
     )
+    # area-specific road-hierarchy override (applied last so it wins) — e.g. the
+    # central district slows residential/unclassified streets to realistic speeds
+    # so through-traffic stays on the arterials instead of rat-running the grid.
+    override = config.SUMO_DIR / f"{spec['name']}_types.typ.xml"
+    if override.exists():
+        type_files = f"{type_files},{override}"
     args = [
         "--osm-files",
         ",".join(str(f) for f in osm_files),

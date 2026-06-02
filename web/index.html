@@ -195,14 +195,19 @@ async function loadRun(id){
   sigChangesMap = sig.changes || {};
   sigGroups = [];                                   // one indicator per approach (incoming edge)
   const sp = sig.pos || {}, se = sig.edges || {};
-  for (const tls in se){
+  const SIG_MERGE = 0.00015;   // ~16 m: collapse approaches piled at one complex
+  for (const tls in se){       // (netconvert-joined) junction so it reads as a dot, not a red blob
     const byEdge = {};
     (se[tls]||[]).forEach((e,i)=>{ if (e==null || !sp[tls] || !sp[tls][i]) return; (byEdge[e]=byEdge[e]||[]).push(i); });
+    const groups = [];
     for (const e in byEdge){
       const idxs=byEdge[e]; let lon=0, lat=0;
       for (const i of idxs){ lon+=sp[tls][i][0]; lat+=sp[tls][i][1]; }
-      sigGroups.push({ tls, idxs, position:[lon/idxs.length, lat/idxs.length] });
+      const pos=[lon/idxs.length, lat/idxs.length];
+      const near = groups.find(g=>Math.abs(g.position[0]-pos[0])<SIG_MERGE && Math.abs(g.position[1]-pos[1])<SIG_MERGE);
+      if (near) near.idxs.push(...idxs); else groups.push({ tls, idxs:[...idxs], position:pos });
     }
+    sigGroups.push(...groups);
   }
   document.getElementById('vcount').textContent = vehicles.toLocaleString();
   document.getElementById('runname').textContent = meta.params.name ?? id;
