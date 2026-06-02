@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Central-district road-hierarchy realism override (Phase 8c).
+     The default OSM typemap gives residential/unclassified streets 50 km/h —
+     identical to arterials — and the auto-net carries no stop signs, so routers
+     treat side streets as arterial-equivalent shortcuts and through-traffic
+     rat-runs the neighbourhood grid. Real residential streets are ~25-30 km/h
+     once the stop-sign-every-block reality is folded into an effective speed.
+     Speed-only override (lanes unchanged) so edge IDs stay stable and the
+     existing buses / signals / equilibrium routes remain valid. -->
+<types>
+  <type id="highway.residential"   numLanes="1" speed="6.94" priority="3" oneway="false" disallow="rail rail_urban rail_electric rail_fast tram drone aircraft scooter container wheelchair subway cable_car ship"/>
+  <type id="highway.unclassified"  numLanes="1" speed="8.33" priority="4" oneway="false" disallow="rail rail_urban rail_electric rail_fast tram drone aircraft scooter container wheelchair subway cable_car ship"/>
+</types>

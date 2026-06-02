@@ -94,6 +94,11 @@ def run(
         "true",
         "--time-to-teleport",
         "120",
+        # short Vancouver blocks spill back through the upstream junction and
+        # cascade into gridlock; let a vehicle nudge through a junction it has
+        # been blocked at for >20 s (drivers do) so deadlocks break instead of lock.
+        "--ignore-junction-blocker",
+        "20",
         "--no-step-log",
         "true",
         "--no-warnings",
