@@ -69,7 +69,15 @@ def _edge_pools(net, home_code: str | None = None) -> dict[str, list[str]]:
       the city net (distant suburbs enter at the nearest city edge)."""
     drivable = []
     for e in net.getEdges():
-        if e.getID().startswith(":") or not e.allows("passenger") or e.getLength() < 30:
+        # require real, drivable, AND connected both ways — a trip-end on a stub
+        # (no incoming or no outgoing) is unroutable and gets silently dropped.
+        if (
+            e.getID().startswith(":")
+            or not e.allows("passenger")
+            or e.getLength() < 30
+            or not e.getOutgoing()
+            or not e.getIncoming()
+        ):
             continue
         x, y = e.getShape()[len(e.getShape()) // 2]
         drivable.append((e.getID(), x, y))
@@ -91,6 +99,28 @@ def _edge_pools(net, home_code: str | None = None) -> dict[str, list[str]]:
     return pools
 
 
+def _sample_window(curve, window, rng):
+    """Sample a departure time inside [begin, end) weighted by the census curve's
+    density within the window. Returns None if the curve doesn't reach the window.
+    Lets an AM-peak run generate *only* trips that actually depart in the window,
+    instead of wasting ~3/4 of the demand on PM / off-peak trips that never run."""
+    b, e = window
+    bins = []
+    for a, z, w in curve:
+        lo, hi = max(a, b), min(z, e)
+        if hi > lo and z > a:
+            bins.append((lo, hi, w * (hi - lo) / (z - a)))
+    if not bins:
+        return None
+    r = rng.random() * sum(x[2] for x in bins)
+    acc = 0.0
+    for lo, hi, w in bins:
+        acc += w
+        if r <= acc:
+            return int(rng.uniform(lo, hi))
+    return int(bins[-1][1])
+
+
 def build_demand(
     out_routes: Path,
     scale: float = 0.10,
@@ -98,6 +128,7 @@ def build_demand(
     refresh: bool = False,
     net_name: str = "metro",
     home_code: str | None = None,
+    window: tuple[int, int] | None = None,
 ) -> Path:
     """Generate distributed census trips and assign routes with duarouter.
 
@@ -134,12 +165,19 @@ def build_demand(
         n_od += 1
         for _ in range(int(round(r["count"] * CAR_SHARE * scale))):
             fr, to = rng.choice(o_pool), rng.choice(d_pool)
-            if fr != to:
-                trips.append((_sample_time(AM_WORK, rng), fr, to, "car"))  # AM outbound
-                trips.append((_sample_time(PM_WORK, rng), to, fr, "car"))  # PM return
+            if fr == to:
+                continue
+            if window:  # AM-peak run: one trip per commuter, departing in-window
+                t = _sample_window(AM_WORK, window, rng)
+                if t is not None:
+                    trips.append((t, fr, to, "car"))
+            else:  # full representative day: AM out + PM return
+                trips.append((_sample_time(AM_WORK, rng), fr, to, "car"))
+                trips.append((_sample_time(PM_WORK, rng), to, fr, "car"))
+    win = f" (in-window {window[0]}-{window[1]})" if window else ""
     print(
         f"  {net_name} OD pairs used={n_od} (skipped {skipped} unmapped) "
-        f"-> {len(trips)} trips (scale={scale})"
+        f"-> {len(trips)} trips (scale={scale}){win}"
     )
     _assign(net, trips, out_routes, net_name=net_name)
     return out_routes

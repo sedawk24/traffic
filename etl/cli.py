@@ -81,9 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
         if name in ("network", "transit"):
             step_p.add_argument(
                 "--area",
-                choices=["peninsula", "metro", "vancouver"],
+                choices=["peninsula", "metro", "vancouver", "central"],
                 default="peninsula",
-                help="study area: peninsula/vancouver (micro, all streets) or metro (meso, arterials)",
+                help="study area: peninsula/central/vancouver (micro) or metro (meso, arterials)",
             )
     return parser
 

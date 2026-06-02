@@ -15,6 +15,7 @@ where CLOSURE_EDGE is '-' for a plain (baseline) run.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -50,10 +51,12 @@ def run(
         pt_routes = config.SUMO_DIR / f"{net_name}_pt_vehicles.rou.xml"
         if pt_routes.exists():
             route_files.append(str(pt_routes))
-            add_files += [
-                str(config.SUMO_DIR / f"{net_name}_pt_vtypes.xml"),
-                str(config.SUMO_DIR / f"{net_name}_pt_stops.add.xml"),
-            ]
+            # vtypes + stop defs — only add what exists (central buses carry
+            # inline stops, so there's no separate stops.add.xml).
+            for fn in (f"{net_name}_pt_vtypes.xml", f"{net_name}_pt_stops.add.xml"):
+                p = config.SUMO_DIR / fn
+                if p.exists():
+                    add_files.append(str(p))
 
     cmd = [
         sumolib.checkBinary("sumo"),
@@ -84,6 +87,10 @@ def run(
         "--no-warnings",
         "true",
     ]
+    # routing is the only part SUMO threads usefully; the micro core is sequential
+    # (--threads gives no meaningful speedup, per SUMO #4767), so we don't set it.
+    nthr = max(1, (os.cpu_count() or 4) - 2)
+    cmd += ["--device.rerouting.threads", str(nthr)]
     if meso:
         cmd += ["--mesosim"]  # mesoscopic (queue-based) for the regional scale
     if fcd_period > 0:

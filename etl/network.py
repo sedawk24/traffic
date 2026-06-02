@@ -49,6 +49,16 @@ def _area(area: str) -> dict:
             "tiles": 4,
             "use_cordon": False,
         }
+    if area == "central":
+        # Central Vancouver district — all streets, micro, small enough for real
+        # gtfs2pt buses + realistic density.
+        return {
+            "name": "central",
+            "bbox": config.CENTRAL_BBOX,
+            "road_types": None,
+            "tiles": 2,
+            "use_cordon": False,
+        }
     return {
         "name": "peninsula",
         "bbox": config.PENINSULA_BBOX,
