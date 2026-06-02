@@ -108,11 +108,12 @@ map.addControl(overlay);
 
 // ---- state ---------------------------------------------------------------
 let T=+Q.get('t')||300, tMax=0, begin=25200, playing=Q.get('play')!=='0', speed=30, last=0, zoom=Z0;
-let trips=[], zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
+let trips=[], busTrips=[], busSchedRaw=null, zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
 let sigGroups=[], sigChangesMap={};
 let runsList=[], closedEdges=[], closedMarker=null, closedStart=0, closedEnd=0, scenarioInfo=null;
 // per-area network/zones/transit, loaded on demand and cached
-const AREA_VIEW = { peninsula:{center:[-123.115,49.283],zoom:12.5}, metro:{center:[-122.99,49.22],zoom:10.2} };
+const AREA_VIEW = { peninsula:{center:[-123.115,49.283],zoom:12.5}, vancouver:{center:[-123.125,49.255],zoom:11.8}, metro:{center:[-122.99,49.22],zoom:10.2} };
+const AREA_LABEL = { peninsula:'Downtown peninsula', vancouver:'City of Vancouver', metro:'Metro Vancouver' };
 const areaData = {}; let curArea=null;
 const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
@@ -123,21 +124,21 @@ init().catch(e => { const l=document.getElementById('loading'); if(l) l.textCont
 async function loadArea(area){
   if (!areaData[area]){
     const net = await fetch(`/api/network?net=${area}`).then(r=>r.json());
-    let zonesP=null, gw=[], tg=null;
+    let zonesP=null, gw=[], tg=null, busS=null;
+    if (area !== 'metro')   // route lines: peninsula (gtfs2pt) — vancouver may 404
+      tg = await fetch(`/api/transit?net=${area}`).then(r=>r.ok?r.json():null).catch(()=>null);
+    if (area !== 'peninsula')   // large nets: schedule-based moving buses
+      busS = await fetch(`/api/transit-vehicles?net=${area}`).then(r=>r.ok?r.json():null).catch(()=>null);
     if (area === 'peninsula'){
-      const [zones, transit] = await Promise.all([
-        fetch('/api/zones').then(r=>r.json()).catch(()=>({features:[]})),
-        fetch('/api/transit').then(r=>r.json()).catch(()=>({features:[]})),
-      ]);
+      const zones = await fetch('/api/zones').then(r=>r.json()).catch(()=>({features:[]}));
       zonesP = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
       gw = zones.features.filter(f=>f.properties.is_gateway);
-      tg = transit;
     }
-    areaData[area] = { roads:net, zonesPoly:zonesP, gateways:gw, transitGeo:tg };
+    areaData[area] = { roads:net, zonesPoly:zonesP, gateways:gw, transitGeo:tg, busSched:busS };
   }
   const d = areaData[area];
-  roads=d.roads; zonesPoly=d.zonesPoly; transitGeo=d.transitGeo; gateways=d.gateways;
-  document.getElementById('arealabel').textContent = area==='metro' ? 'Metro Vancouver' : 'Downtown peninsula';
+  roads=d.roads; zonesPoly=d.zonesPoly; transitGeo=d.transitGeo; gateways=d.gateways; busSchedRaw=d.busSched;
+  document.getElementById('arealabel').textContent = AREA_LABEL[area] || 'Vancouver';
   if (area !== curArea){
     curArea = area;
     if (!Q.get('zoom') && AREA_VIEW[area]){ const v=AREA_VIEW[area]; map.jumpTo(v); zoom=v.zoom; }
@@ -153,6 +154,13 @@ async function loadRun(id){
   ]);
   await loadArea((meta.params && meta.params.area) || 'peninsula');
   begin = meta.params.begin ?? 25200; tMax = meta.stats.trajectory.t_max;
+  // schedule buses (large nets): offset absolute stop times by the run's begin
+  busTrips = [];
+  if (busSchedRaw && busSchedRaw.buses)
+    for (const b of busSchedRaw.buses){
+      const ts = b.times.map(s=>s-begin);
+      busTrips.push({ cls:'bus', path:b.path, timestamps:ts, t0:ts[0], tN:ts[ts.length-1] });
+    }
   vehicles = meta.stats.trajectory.vehicles; trips = t; volMap = vol;
   // adaptive flow scale: the 92nd-percentile edge volume maps to "busy" (red),
   // so the ramp works for both peninsula (FCD counts) and metro (route counts)
@@ -248,7 +256,7 @@ async function init(){
 // ---- interpolate each active vehicle (position, heading, speed) ----------
 function interpAt(t){
   const out=[];
-  for (const tr of trips){
+  for (const tr of (busTrips.length ? trips.concat(busTrips) : trips)){
     if (t<tr.t0 || t>tr.tN) continue;
     const ts=tr.timestamps, n=ts.length; let lo=0, hi=n-1;
     while (lo+1<hi){ const m=(lo+hi)>>1; if (ts[m]<=t) lo=m; else hi=m; }
@@ -305,7 +313,7 @@ function layers(){
     const data=interpAt(t); nActive=data.length;
     L.push(new deck.IconLayer({ id:'veh', data, iconAtlas:ATLAS_URL, iconMapping:ATLAS_MAP, billboard:false,
       getIcon:d=>d.cls==='bus'?'bus':'car', getPosition:d=>d.position,
-      getColor:d=> show.congestion ? congColor(d.speed) : (VCOL[d.cls]||[120,120,120]),
+      getColor:d=> d.cls==='bus' ? [25,115,255] : (show.congestion ? congColor(d.speed) : (VCOL[d.cls]||[120,120,120])),
       getAngle:d=>d.angle, getSize:d=>d.cls==='bus'?24:15, sizeUnits:'pixels', sizeMinPixels:6,
       alphaCutoff:0.05, updateTriggers:{getColor:show.congestion}, parameters:{depthTest:false} }));
   }

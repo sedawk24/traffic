@@ -43,19 +43,40 @@ def _count(path: Path, tag: str) -> int:
 
 
 def run(args) -> int:
-    print("=== etl transit: GTFS -> SUMO pt ===")
+    area = getattr(args, "area", "peninsula")
+    net_name = area
+    bbox = {"metro": config.METRO_BBOX, "vancouver": config.VANCOUVER_BBOX}.get(
+        area, config.PENINSULA_BBOX
+    )
+    print(f"=== etl transit: GTFS -> SUMO pt ({net_name}) ===")
     refresh = getattr(args, "refresh", False)
     gtfs = util.download_file(GTFS_URL, config.GTFS_DIR / "google_transit.zip", refresh)
-    net = config.SUMO_DIR / "peninsula.net.xml"
+    net = config.SUMO_DIR / f"{net_name}.net.xml"
     svc_date = _service_wednesday(gtfs)
     print(f"  service date (representative Wed): {svc_date}")
 
-    work = config.GTFS_DIR / "work"
+    if area != "peninsula":
+        # gtfs2pt's per-trip routing is intractable on the big all-streets/region
+        # nets (hours); render buses from the GTFS timetable instead.
+        from etl import transit_schedule
+
+        res = transit_schedule.build(net_name, bbox, svc_date)
+        conn = db.connect()
+        db.init_db(conn)
+        db.record_source(
+            conn, "gtfs_translink", extract_date=date.today().isoformat(), row_count=res["buses"]
+        )
+        conn.commit()
+        conn.close()
+        print(f"  schedule-based buses: {res['buses']} trips -> {Path(res['path']).name}")
+        return 0
+
+    work = config.GTFS_DIR / f"work_{net_name}"
     work.mkdir(parents=True, exist_ok=True)
-    route_out = config.SUMO_DIR / "peninsula_pt_vehicles.rou.xml"
-    add_out = config.SUMO_DIR / "peninsula_pt_stops.add.xml"
-    vtype_out = config.SUMO_DIR / "peninsula_pt_vtypes.xml"
-    w, s, e, n = config.PENINSULA_BBOX
+    route_out = config.SUMO_DIR / f"{net_name}_pt_vehicles.rou.xml"
+    add_out = config.SUMO_DIR / f"{net_name}_pt_stops.add.xml"
+    vtype_out = config.SUMO_DIR / f"{net_name}_pt_vtypes.xml"
+    w, s, e, n = bbox
 
     gtfs2pt = config.sumo_tool("import/gtfs/gtfs2pt.py")
     env = {**os.environ, "SUMO_HOME": str(config.sumo_home())}
@@ -78,8 +99,19 @@ def run(args) -> int:
         str(add_out),
         "--vtype-output",
         str(vtype_out),
-        "--repair",
     ]
+    if area == "peninsula":
+        # --repair reroutes disconnected GTFS routes via duarouter — cheap on the
+        # small cordon net, but it explodes on the big city net (hours). The
+        # all-streets city/metro nets need it far less (every street is present),
+        # so skip it there.
+        cmd.append("--repair")
+    else:
+        # gtfs2pt routes every bus trip onto the net; on the big city net that is
+        # the bottleneck, so map only buses active in the AM run window
+        # (~06:40-09:00) rather than the whole service day. (PM runs would need a
+        # wider window — fine for the current AM demos.)
+        cmd += ["--begin", "24000", "--end", "32400"]
     print("  $ gtfs2pt.py", " ".join(cmd[2:]))
     subprocess.run(cmd, check=True, cwd=work, env=env)
 

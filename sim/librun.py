@@ -37,20 +37,22 @@ def run(
     closure_start: int = 0,
     closure_end: int = 0,
     meso: bool = False,
+    fcd_period: int = 0,
 ) -> None:
     import libsumo
     import sumolib
 
     net = sumolib.net.readNet(str(net_path))
+    net_name = net_path.name.split(".")[0]
     route_files = [str(routes)]
     add_files: list[str] = []
     if with_transit:
-        pt_routes = config.SUMO_DIR / "peninsula_pt_vehicles.rou.xml"
+        pt_routes = config.SUMO_DIR / f"{net_name}_pt_vehicles.rou.xml"
         if pt_routes.exists():
             route_files.append(str(pt_routes))
             add_files += [
-                str(config.SUMO_DIR / "peninsula_pt_vtypes.xml"),
-                str(config.SUMO_DIR / "peninsula_pt_stops.add.xml"),
+                str(config.SUMO_DIR / f"{net_name}_pt_vtypes.xml"),
+                str(config.SUMO_DIR / f"{net_name}_pt_stops.add.xml"),
             ]
 
     cmd = [
@@ -83,9 +85,11 @@ def run(
         "true",
     ]
     if meso:
-        # Mesoscopic (queue-based) for the regional scale; sample FCD coarsely
-        # since the regional view renders aggregated flow, not individual cars.
-        cmd += ["--mesosim", "--device.fcd.period", "10"]
+        cmd += ["--mesosim"]  # mesoscopic (queue-based) for the regional scale
+    if fcd_period > 0:
+        # sample FCD coarsely (regional view renders flow, not every car; the
+        # all-streets city run is large) — keeps the trace small enough to replay
+        cmd += ["--device.fcd.period", str(fcd_period)]
     if add_files:
         cmd += ["-a", ",".join(add_files)]
     libsumo.start(cmd)
@@ -157,4 +161,5 @@ if __name__ == "__main__":
         int(a[10]),
         int(a[11]),
         meso=len(a) > 12 and a[12] == "1",
+        fcd_period=int(a[13]) if len(a) > 13 else 0,
     )

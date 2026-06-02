@@ -16,6 +16,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 5 | Scenarios (accident / closure injection) | Complete |
 | 6 | Scale & calibrate (best-effort quantitative) | Complete |
 | 7 | Metro-wide expansion (mesoscopic region) | In Progress |
+| 8 | Full-detail city (complete micro simulation) | In Progress |
 
 **v1 north star:** a polished, fully-working vertical slice on the **downtown Vancouver peninsula** (cordoned at the bridges). Region-wide coverage is a later expansion, not a v1 gate.
 
@@ -195,10 +196,32 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
+## Phase 8: Full-detail city — "complete simulation" (In Progress)
+
+### Tasks
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 1 | Full City of Vancouver net (all streets, micro) | Done | `etl network --area vancouver`: all drivable roads over `VANCOUVER_BBOX`, tiled → 76,220 edges / 28,021 junctions / 1,089 TLS |
+| 2 | Distributed city demand (side streets populated) | Done | `demand_metro` `home_code`=Vancouver owns every street; other CSDs get K nearest boundary edges (318 OD pairs vs 41) |
+| 3 | Buses on the big net | Done | gtfs2pt intractable (>78 min hang) → `etl/transit_schedule.py` GTFS-schedule layer: 1,895 AM buses, built in ~4 s; fixed a GTFS int/str id-join bug |
+| 4 | Live signals (micro) | Done | Micro run captures all 1,089 signals' per-approach states; cycle at street zoom |
+| 5 | Area-aware API + viewer for the city | Done | `/api/transit-vehicles`; viewer loads city net + schedule buses (blue), regional camera, cars+buses+signals at street zoom |
+| 6 | Density tuning | In Progress | scale-0.12 = 13,345 veh / 1,477 peak; scale-0.30 run for fuller density |
+
+### Verification
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Zoom into a neighbourhood shows side-street cars + buses + signals | Done | West Side @ 08:10: cars on residential streets (congestion-colored), buses (blue) on 4th/Broadway/Macdonald, 1,089 signals cycling — vs the single car before |
+
+---
+
 ## Change Log
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-01 | 8 | **Phase 8 — full-detail microscopic City of Vancouver ("complete simulation").** Third study area: `etl network --area vancouver` builds all 76,220 street-edges (incl. residential side streets), `sim run --demand vancouver` runs it micro with live signals (1,089) + buses. Fixed the demand to populate side streets (`home_code` = the city owns every street; distant suburbs enter at the boundary → 318 OD pairs vs 41). Diagnosed gtfs2pt as intractable on the big net (>78 min hang across 3 attempts) and replaced it with a GTFS-**schedule** bus layer (`etl/transit_schedule.py`, `/api/transit-vehicles`, viewer bus animation) — 1,895 AM buses in ~4 s; fixed a GTFS int/str id-join bug that silently yielded 0 buses. Viewer made area-aware (loads each run's net/buses per `params.area`, distinct blue buses). Verified a populated West Side (cars on side streets + buses + cycling signals) at scale 0.12 (13,345 veh); density tuning to 0.30 in progress. |
 | 2026-06-01 | 7 | **Phase 7 — metro-wide mesoscopic expansion (region replays in the browser).** Generalized the network builder for a second study area: `etl network --area metro` fetches major roads (`--road-types`, 4 tiles) over `METRO_BBOX` → `metro.net.xml` (29,596 edges). New `sim/demand_metro.py` turns the CSD→CSD OD into municipality-to-municipality trips via centroid edge pools (out-of-bbox CSDs snap to the boundary). `sim run --demand metro` runs `--mesosim` (parameterized `librun`: meso flag, coarse FCD, skip transit/signal capture); a scale-0.15 AM peak = 27,241 veh. Made the API + viewer area-aware (`/api/network?net=`, per-run network load, regional camera, adaptive flow-color scale, route-file volumes for meso); fixed a duplicate-`id` bug that left the run-selector inert. Metro calibration/transit/finer-demand → backlog. |
 | 2026-06-01 | 6 | **Phase 6 complete — calibration; exit gate met (final phase).** Bridge crossings are the cordon screenlines. `etl/calibration.py` (`etl calibrate`) seeds published bridge AADT → AM-peak count targets (web-sourced: Wikipedia/CoV/MoTI; CoV+MoTI bulk feeds unobtainable, estimates flagged). `sim/calibrate.py` (`sim calibrate --run`) counts simulated AM-peak two-way gateway volumes from the FCD, fits a global demand scale, computes GEH, writes `calibration_results` + `docs/calibration/report.md`. Calibration exposed the Phase-4 east-viaduct over-routing / Lions-Gate starvation; fixed with per-gateway demand weights (`GATEWAY_WEIGHT`) in `sim/demand_census.py` (scale-invariant split correction). **Result: 5/5 screenlines GEH<5, mean 1.22.** Full-demand scale ~3.24 (≈18× the replay sub-sample) — full microsim exceeds SUMO's single-core ceiling, so replay sub-samples while the split holds. Re-ran am_base + am_granville on the calibrated demand. All 6 build phases (0–6) now complete. |
 | 2026-06-01 | 5 | **Fix: closure highlight is time-gated to the closure window.** The red "✕ closed" edges + scenario header showed from 07:00 even though Granville doesn't close until 08:00 — confusing (bridge marked closed while traffic crossed it). `web/index.html` now only reds the closed edges when `begin+T` is within `[closure.start, closure.end)`, and a live panel header reads "closes 08:00" (amber) → "✕ closed" (red) → "reopened" (green). Verified via DOM dump at 07:30 (amber, unmarked) vs 08:10 (red, ✕). |

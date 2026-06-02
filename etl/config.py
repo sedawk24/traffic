@@ -70,6 +70,14 @@ METRO_ROAD_TYPES = [
     "tertiary", "tertiary_link",
 ]
 
+# --- City of Vancouver full-detail study area (Phase 8) ----------------------
+# The whole City of Vancouver — Point Grey/UBC gateway in the west to Boundary Rd
+# (Burnaby) in the east, the Fraser arms south to Burrard Inlet north. ALL
+# drivable streets (incl. residential side streets), run microscopically with
+# live signals + buses. Bigger than the downtown peninsula, smaller than metro;
+# the "complete simulation" focus area.
+VANCOUVER_BBOX: tuple[float, float, float, float] = (-123.225, 49.198, -123.022, 49.318)
+
 # --- Open-data source registry (cited by loaders in the `sources` table) ------
 # Verified in docs/research/data-sources.md (2026-05-31). Attribution required.
 SOURCES: dict[str, dict[str, str]] = {
