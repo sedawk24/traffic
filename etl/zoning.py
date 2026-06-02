@@ -172,7 +172,7 @@ def _write_db(zones: list[dict]) -> None:
     conn.close()
 
 
-def _export_geojson(zones: list[dict]) -> Path:
+def _export_geojson(zones: list[dict], out: Path) -> Path:
     fc = {
         "type": "FeatureCollection",
         "features": [
@@ -190,7 +190,6 @@ def _export_geojson(zones: list[dict]) -> Path:
             for z in zones
         ],
     }
-    out = config.ZONES_DIR / "zones.geojson"
     out.write_text(json.dumps(fc))
     return out
 
@@ -208,17 +207,38 @@ def _summary(zones: list[dict]) -> None:
 
 
 def run(args) -> int:
-    print("=== etl zoning: land use -> zones ===")
+    area = getattr(args, "area", "peninsula")
+    print(f"=== etl zoning: land use -> zones ({area}) ===")
     refresh = getattr(args, "refresh", False)
     config.ZONES_DIR.mkdir(parents=True, exist_ok=True)
-    cordon = Polygon(config.CORDON_POLYGON)
 
     zoning_path = _download(ZONING_URL, config.ZONES_DIR / "cov_zoning.geojson", refresh)
     parks_path = _download(PARKS_URL, config.ZONES_DIR / "cov_parks.geojson", refresh)
 
-    zones = _load_zoning(zoning_path, cordon) + _load_parks(parks_path, cordon) + _load_gateways()
-    _write_db(zones)
-    out = _export_geojson(zones)
+    if area == "peninsula":
+        clip, gateways, out_file = Polygon(config.CORDON_POLYGON), _load_gateways(), "zones.geojson"
+    else:
+        from shapely.geometry import box
+
+        w, s, e, n = {"central": config.CENTRAL_BBOX, "vancouver": config.VANCOUVER_BBOX}.get(
+            area, config.CENTRAL_BBOX
+        )
+        clip, gateways, out_file = box(w, s, e, n), [], f"{area}_zones.geojson"
+
+    zones = _load_zoning(zoning_path, clip) + _load_parks(parks_path, clip) + gateways
+    if area != "peninsula":
+        # CD (Comprehensive Development) blanket-maps to downtown-core, which is
+        # right downtown but wrong on the West Side (most CD there is residential).
+        # Keep downtown-core only inside the actual downtown peninsula.
+        dw, ds, de, dn = -123.145, 49.268, -123.095, 49.295
+        for z in zones:
+            if z["land_use"] == "downtown-core" and not (
+                dw <= z["centroid_lon"] <= de and ds <= z["centroid_lat"] <= dn
+            ):
+                z["land_use"] = "residential"
+    out = _export_geojson(zones, config.ZONES_DIR / out_file)
+    if area == "peninsula":  # only the calibrated peninsula populates the zones table
+        _write_db(zones)
 
     n_gw = sum(z["is_gateway"] for z in zones)
     print(f"  zones: {len(zones)} ({n_gw} gateways) -> {out}")

@@ -132,8 +132,8 @@ async function loadArea(area){
       tg = await fetch(`/api/transit?net=${area}`).then(r=>r.ok?r.json():null).catch(()=>null);
     if (area === 'vancouver' || area === 'metro')   // big nets: schedule-based moving buses
       busS = await fetch(`/api/transit-vehicles?net=${area}`).then(r=>r.ok?r.json():null).catch(()=>null);
-    if (area === 'peninsula'){
-      const zones = await fetch('/api/zones').then(r=>r.json()).catch(()=>({features:[]}));
+    if (area !== 'metro'){   // micro areas (peninsula/central/vancouver) carry land-use zones
+      const zones = await fetch(`/api/zones?net=${area}`).then(r=>r.ok?r.json():{features:[]}).catch(()=>({features:[]}));
       zonesP = { type:'FeatureCollection', features: zones.features.filter(f=>f.geometry.type!=='Point') };
       gw = zones.features.filter(f=>f.properties.is_gateway);
     }

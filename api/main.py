@@ -295,10 +295,11 @@ def signals() -> Response:
 
 
 @app.get("/api/zones")
-def zones() -> FileResponse:
-    z = config.ZONES_DIR / "zones.geojson"
+def zones(net: str = "peninsula") -> FileResponse:
+    name = net if net in _AREAS else "peninsula"
+    z = config.ZONES_DIR / ("zones.geojson" if name == "peninsula" else f"{name}_zones.geojson")
     if not z.exists():
-        raise HTTPException(404, "zones.geojson missing — run `etl zoning`")
+        raise HTTPException(404, f"zones for {name} missing — run `etl zoning --area {name}`")
     return FileResponse(z, media_type=GEOJSON_MEDIA)
 
 
