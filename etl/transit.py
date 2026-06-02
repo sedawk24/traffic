@@ -55,9 +55,10 @@ def run(args) -> int:
     svc_date = _service_wednesday(gtfs)
     print(f"  service date (representative Wed): {svc_date}")
 
-    if area != "peninsula":
+    if area in ("vancouver", "metro"):
         # gtfs2pt's per-trip routing is intractable on the big all-streets/region
-        # nets (hours); render buses from the GTFS timetable instead.
+        # nets (hours); render buses from the GTFS timetable instead. The smaller
+        # peninsula/central nets get real SUMO pt below (buses stop + obey signals).
         from etl import transit_schedule
 
         res = transit_schedule.build(net_name, bbox, svc_date)
@@ -69,6 +70,23 @@ def run(args) -> int:
         conn.commit()
         conn.close()
         print(f"  schedule-based buses: {res['buses']} trips -> {Path(res['path']).name}")
+        return 0
+
+    if area == "central":
+        # Mid-size all-streets net: build REAL SUMO bus vehicles (stop + obey
+        # signals) by snapping GTFS stops to edges and routing with duarouter —
+        # gtfs2pt is too slow/fragile here, but the buses are real, not scheduled.
+        from etl import transit_buses
+
+        res = transit_buses.build(net_name, bbox, svc_date)
+        conn = db.connect()
+        db.init_db(conn)
+        db.record_source(
+            conn, "gtfs_translink", extract_date=date.today().isoformat(), row_count=res["routed"]
+        )
+        conn.commit()
+        conn.close()
+        print(f"  real SUMO buses: {res['routed']} routed of {res['buses']} (stop + obey signals)")
         return 0
 
     work = config.GTFS_DIR / f"work_{net_name}"

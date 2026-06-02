@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 8 (full-detail city) underway — a complete microscopic City of Vancouver (76k all-streets edges) replays cars on side streets, buses on real GTFS schedules, and 1,089 live signals. Phase 7 added the mesoscopic metro overview; all six original build phases (0–6) are complete.**
+**Status: Phase 8b (make-it-real fixes) — after a measured system review, the new `central` Vancouver district runs micro with REAL SUMO buses (stop + obey signals), live signals, and demand that's been fixed for routability (41%→17% dropped) and in-window efficiency (24%→100%). Calibrated against real bridge volumes: real density ≈ 1 car/71m (scale 0.55, Granville/Cambie GEH<5). All six original build phases (0–6) complete; Phases 7 (metro meso) + 8 (full city) added.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 

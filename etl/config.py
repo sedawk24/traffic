@@ -78,6 +78,13 @@ METRO_ROAD_TYPES = [
 # the "complete simulation" focus area.
 VANCOUVER_BBOX: tuple[float, float, float, float] = (-123.225, 49.198, -123.022, 49.318)
 
+# --- Central Vancouver district (Phase 8b): focused micro at REAL density ------
+# Downtown + the West Side (Point Grey/Kitsilano to Main St, the Fraser-side
+# arterials up to Burrard Inlet) — small enough for gtfs2pt's real SUMO buses
+# (that stop + obey signals) and for a realistic, dense microscopic run, while
+# covering the West-Side neighbourhoods. The "focused area, fully real" study area.
+CENTRAL_BBOX: tuple[float, float, float, float] = (-123.205, 49.240, -123.095, 49.295)
+
 # --- Open-data source registry (cited by loaders in the `sources` table) ------
 # Verified in docs/research/data-sources.md (2026-05-31). Attribution required.
 SOURCES: dict[str, dict[str, str]] = {

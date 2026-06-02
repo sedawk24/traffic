@@ -112,8 +112,8 @@ let trips=[], busTrips=[], busSchedRaw=null, zonesPoly=null, gateways=[], roads=
 let sigGroups=[], sigChangesMap={};
 let runsList=[], closedEdges=[], closedMarker=null, closedStart=0, closedEnd=0, scenarioInfo=null;
 // per-area network/zones/transit, loaded on demand and cached
-const AREA_VIEW = { peninsula:{center:[-123.115,49.283],zoom:12.5}, vancouver:{center:[-123.125,49.255],zoom:11.8}, metro:{center:[-122.99,49.22],zoom:10.2} };
-const AREA_LABEL = { peninsula:'Downtown peninsula', vancouver:'City of Vancouver', metro:'Metro Vancouver' };
+const AREA_VIEW = { peninsula:{center:[-123.115,49.283],zoom:12.5}, central:{center:[-123.150,49.265],zoom:12.6}, vancouver:{center:[-123.125,49.255],zoom:11.8}, metro:{center:[-122.99,49.22],zoom:10.2} };
+const AREA_LABEL = { peninsula:'Downtown peninsula', central:'Central Vancouver', vancouver:'City of Vancouver', metro:'Metro Vancouver' };
 const areaData = {}; let curArea=null;
 const show = { zones:true, roads:true, transit:true, vehicles:true, congestion:true, signals:true, labels:true };
 
@@ -125,9 +125,9 @@ async function loadArea(area){
   if (!areaData[area]){
     const net = await fetch(`/api/network?net=${area}`).then(r=>r.json());
     let zonesP=null, gw=[], tg=null, busS=null;
-    if (area !== 'metro')   // route lines: peninsula (gtfs2pt) — vancouver may 404
+    if (area === 'peninsula' || area === 'central')   // real gtfs2pt buses -> route lines + sim bus vehicles
       tg = await fetch(`/api/transit?net=${area}`).then(r=>r.ok?r.json():null).catch(()=>null);
-    if (area !== 'peninsula')   // large nets: schedule-based moving buses
+    if (area === 'vancouver' || area === 'metro')   // big nets: schedule-based moving buses
       busS = await fetch(`/api/transit-vehicles?net=${area}`).then(r=>r.ok?r.json():null).catch(()=>null);
     if (area === 'peninsula'){
       const zones = await fetch('/api/zones').then(r=>r.json()).catch(()=>({features:[]}));

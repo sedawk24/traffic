@@ -113,6 +113,7 @@ def _register(args, traj_path, started_at, stats, scenario_name, closure) -> int
 _PROFILES = {
     "metro": {"net": "metro", "meso": True, "fcd_period": 10, "transit": False, "distributed": True, "home": None},
     "vancouver": {"net": "vancouver", "meso": False, "fcd_period": 2, "transit": True, "distributed": True, "home": "5915022"},
+    "central": {"net": "central", "meso": False, "fcd_period": 2, "transit": True, "distributed": True, "home": "5915022"},
 }
 _DEFAULT_PROFILE = {"net": "peninsula", "meso": False, "fcd_period": 0, "transit": True, "distributed": False, "home": None}
 
@@ -148,6 +149,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             refresh=args.refresh_demand,
             net_name=net_name,
             home_code=prof["home"],
+            window=(args.begin, args.end),
         )
     elif args.demand == "census":
         demand_census.build_demand(
@@ -214,9 +216,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--name", default="baseline", help="run name (-> data/runs/<name>/)")
     r.add_argument(
         "--demand",
-        choices=["random", "census", "metro", "vancouver"],
+        choices=["random", "census", "metro", "vancouver", "central"],
         default="random",
-        help="demand: random, census (peninsula), vancouver (full-city micro), metro (region meso)",
+        help="demand: random, census (peninsula), central/vancouver (city micro), metro (region meso)",
     )
     r.add_argument("--scale", type=float, default=0.12, help="census demand sub-sampling factor")
     r.add_argument(

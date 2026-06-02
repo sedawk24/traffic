@@ -51,11 +51,17 @@ uv run python -m sim run --demand metro --name metro_am --scale 0.15 \
       --begin 25200 --end 32400                # ~27k vehicles, mesoscopic
 # select the metro run in the viewer (it switches to a regional flow view)
 
-# Full-detail City of Vancouver (Phase 8): all streets, micro, buses + signals
+# Full-detail City of Vancouver (Phase 8): all streets, micro, schedule buses
 uv run python -m etl network --area vancouver  # all 76k street-edges
 uv run python -m etl transit --area vancouver  # GTFS-schedule buses
 uv run python -m sim run --demand vancouver --name van_am --scale 0.2 \
       --begin 25200 --end 32400                # cars on side streets, buses, live signals
+
+# Central Vancouver district (Phase 8b): REAL buses that stop + obey signals
+uv run python -m etl network --area central    # downtown + West Side, 23.6k edges
+uv run python -m etl transit --area central    # real SUMO buses (snap stops + duarouter)
+uv run python -m sim run --demand central --name central_am --scale 0.12 \
+      --begin 25200 --end 32400                # calibrated micro: cars, real buses, signals
 ```
 
 All six build phases (0–6) are complete (the calibrated peninsula vertical slice
