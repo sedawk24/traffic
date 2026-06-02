@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 8b (make-it-real fixes) — after a measured system review, the new `central` Vancouver district runs micro with REAL SUMO buses (stop + obey signals), live signals, and demand that's been fixed for routability (41%→17% dropped) and in-window efficiency (24%→100%). Calibrated against real bridge volumes: real density ≈ 1 car/71m (scale 0.55, Granville/Cambie GEH<5). All six original build phases (0–6) complete; Phases 7 (metro meso) + 8 (full city) added.**
+**Status: Phase 8c (route equilibrium + road hierarchy + signal coordination) — the `central` Vancouver district now runs busy, flowing, *and* routed like reality. Three linked fixes: (1) `duaIterate` user-equilibrium routing (busy + flowing, 0 gridlock vs one-shot's 21% stuck); (2) arterial routing bias (`--weights.priority-factor`/`--weights.minor-penalty`) so traffic stays on Broadway/Granville/Cambie instead of rat-running residential side streets (residential vehicle-km 35%→23%, the W 12th jam gone); (3) `tlsCoordinator` green-wave signal coordination (−16% wait / +9% throughput). Final run #31: 11,356 on-road at the AM peak, 0 teleported. The district also runs REAL SUMO buses (stop + obey signals), live signals, and demand fixed for routability (41%→17% dropped) + in-window efficiency (24%→100%); calibrated against real bridge volumes (Granville/Cambie GEH<5). All six original build phases (0–6) complete; Phases 7 (metro meso) + 8 (full city, equilibrium) added.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -86,15 +86,26 @@ A third study area — the **whole City of Vancouver, all streets, microscopic**
 - **Demand.** `demand_metro.build_demand(home_code=Vancouver)`: the city owns *every* street so the large intra-Vancouver flow spreads across all of them (side-street traffic); other CSDs get the K city edges nearest them, so distant suburbs **enter at the boundary** rather than being dropped (318 OD pairs vs 41 before the fix).
 - **Buses (`etl transit --area vancouver`).** gtfs2pt's per-trip routing is intractable on 76k edges (hung for >78 min), so large nets use a **GTFS-schedule layer** (`etl/transit_schedule.py`): each bus trip → its stop polyline + scheduled times, animated in the viewer (**1,895 buses** in the AM window, built in ~4 s). Honest tradeoff: scheduled, not traffic-interacting (gtfs2pt's SUMO pt is kept for the peninsula).
 - **Signals.** The micro run captures live per-approach states for all 1,089 signals (as the peninsula does) — they cycle at street zoom.
-- **Run + view.** Microscopic, FCD sampled every 2 s (the all-streets trace is large). The area-aware viewer loads the city net + schedule buses (distinct blue), regional camera, and at street zoom shows individual cars on side streets, buses, and cycling signals. Verified: a scale-0.12 AM peak = 13,345 vehicles / 1,477 peak active; a denser scale-0.30 run follows.
+- **Run + view.** Microscopic, FCD sampled every 2 s (the all-streets trace is large). The area-aware viewer loads the city net + schedule buses (distinct blue), regional camera, and at street zoom shows individual cars on side streets, buses, and cycling signals. Verified: a scale-0.12 AM peak = 13,345 vehicles / 1,477 peak active.
+
+### Route equilibrium + road hierarchy + signal coordination (8c) — a realistic busy district
+
+Getting traffic that is busy *and* flowing *and* routed like reality took three linked fixes (orchestrated under `data/runs/central_dua/`; the only code changes are in `sim/cli.py` + `sim/librun.py`):
+
+1. **Equilibrium routing.** One-shot shortest-path routing gridlocked the auto-net above scale ~0.06 (all cars on the same arterials), yet scaling down left it near-empty. SUMO **`duaIterate.py`** (7 meso iterations, `central` net, scale 0.15, 50,392 routable trips) drives traffic to **user-equilibrium**, replayed **micro** with online rerouting **off** so the converged routes are *followed*: new `sim run --routes-file <equil> --reroute-prob 0` (librun rerouting prob/threads parameterized; trips pre-filtered to routable + vTypes inlined so duaIterate runs clean). → 10,452 peak on-road, 0 stuck (vs one-shot 21 % gridlocked).
+2. **Road hierarchy.** That equilibrium *over-spread onto residential side streets* (W 12th jammed while Broadway sat empty) — duarouter routes on time only, and the net models residential at 44 km/h ≈ arterials with no stop signs. Re-ran duaIterate with `--weights.priority-factor 4` + `--weights.minor-penalty 12` → arterial vehicle-km **64 %→76 %**, residential **35 %→23 %**, busiest residential street **539→260 veh**, the W 12th rat-run gone.
+3. **Signal coordination.** Concentrating traffic back on the arterials saturated them (avg wait 1,035→1,258 s); **`tlsCoordinator`** green-wave offsets (502 signals from the equilibrium flows; librun prefers `*_tls_coord.add.xml` over the per-intersection cycle program) cut wait **−16 %** / +9 % throughput (1-hour A/B).
+
+**Final (run #31, 07:00–09:30 AM): 11,356 on-road at the peak, avg wait 1,071 s, 0 teleported** — traffic on the right roads, signals coordinated, busy, nothing broken-gridlocked. View: `/?run=31&t=4500`. Deeper ceiling (arterial lane capacity + whole-city equilibrium) → backlog.
 
 ## What Is In Progress
 
-Phase 8 — tuning demand **density** (scale 0.30 run) for a fuller-looking city. See `docs/development/phases/phase-8.md`.
+Phase 8c — **whole-city route equilibrium.** The central district (equilibrium + arterial bias + signal coordination) is done and proves the approach; extending it to the full 76k-edge city net is a longer (multi-hour) job. The deeper ceiling — the net's effective capacity is ~half of real — now wants **lane-count corrections** (OSM under-tags arterial lanes; signal coordination is already in) to flow at true demand. See `docs/development/phases/phase-8.md`.
 
 ## What Is Next
 
-- **Density / sub-municipal demand.** Higher micro density on the city net; census-tract/DA origins for neighbourhood accuracy (vs the city-uniform intra-Vancouver spread).
+- **Whole-city equilibrium + network capacity.** Run `duaIterate` on the `vancouver` net; raise the flowing ceiling toward real density via lane/turn/signal-coordination fixes (the auto-net under-models capacity).
+- **Density / sub-municipal demand.** Census-tract/DA origins for neighbourhood accuracy (vs the city-uniform intra-Vancouver spread).
 - **Metro calibration & refinement.** Generalize the peninsula GEH method to regional screenlines; LOD hand-off (auto-switch vancouver↔metro by zoom).
 - **Live data + richer scenarios.** GTFS-Realtime / DriveBC as live feeds; click-to-place accidents/closures.
 
@@ -109,4 +120,4 @@ Phase 8 — tuning demand **density** (scale 0.30 run) for a fuller-looking city
 
 ---
 
-*Last updated: 2026-06-01 (Phase 8 — full-detail city)*
+*Last updated: 2026-06-02 (Phase 8c — route equilibrium: busy and flowing)*

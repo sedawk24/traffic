@@ -39,6 +39,7 @@ def run(
     closure_end: int = 0,
     meso: bool = False,
     fcd_period: int = 0,
+    reroute_prob: float = 1.0,
 ) -> None:
     import libsumo
     import sumolib
@@ -57,9 +58,15 @@ def run(
                 p = config.SUMO_DIR / fn
                 if p.exists():
                     add_files.append(str(p))
-    # demand-adapted signal timings (tlsCycleAdaptation), program "a" — loaded
-    # here, switched on after start so the net flows at higher density.
-    tls_add = config.SUMO_DIR / f"{net_name}_tls_cycle.add.xml"
+    # demand-adapted signal timings. Prefer coordinated green-wave offsets
+    # (tlsCoordinator -> *_tls_coord.add.xml, which retunes the running program's
+    # offsets so arterials progress) over per-intersection cycle adaptation
+    # (tlsCycleAdaptation -> *_tls_cycle.add.xml, program "a"). The coordinated
+    # file patches the default program in place, so it needs no activation switch.
+    tls_coord = config.SUMO_DIR / f"{net_name}_tls_coord.add.xml"
+    tls_cycle = config.SUMO_DIR / f"{net_name}_tls_cycle.add.xml"
+    tls_add = tls_coord if tls_coord.exists() else tls_cycle
+    tls_program = None if tls_coord.exists() else "a"
     if tls_add.exists():
         add_files.append(str(tls_add))
 
@@ -76,7 +83,7 @@ def run(
         "--tripinfo-output",
         str(tripinfo_out),
         "--device.rerouting.probability",
-        "1",
+        str(reroute_prob),
         "--device.rerouting.period",
         "90",
         "--begin",
@@ -94,8 +101,9 @@ def run(
     ]
     # routing is the only part SUMO threads usefully; the micro core is sequential
     # (--threads gives no meaningful speedup, per SUMO #4767), so we don't set it.
-    nthr = max(1, (os.cpu_count() or 4) - 2)
-    cmd += ["--device.rerouting.threads", str(nthr)]
+    if reroute_prob > 0:
+        nthr = max(1, (os.cpu_count() or 4) - 2)
+        cmd += ["--device.rerouting.threads", str(nthr)]
     if meso:
         cmd += ["--mesosim"]  # mesoscopic (queue-based) for the regional scale
     if fcd_period > 0:
@@ -110,10 +118,10 @@ def run(
     # for meso: thousands of regional TLS aren't shown at regional zoom and the
     # per-step capture would dominate runtime + trace size.
     ids = [] if meso else libsumo.trafficlight.getIDList()
-    if tls_add.exists() and not meso:  # activate the demand-adapted signal program
+    if tls_add.exists() and tls_program and not meso:  # activate the fixed-cycle program
         for t in ids:
             try:
-                libsumo.trafficlight.setProgram(t, "a")
+                libsumo.trafficlight.setProgram(t, tls_program)
             except Exception:  # noqa: BLE001 — TLS without an adapted program keep default
                 pass
     pos, edges = {}, {}
@@ -180,4 +188,5 @@ if __name__ == "__main__":
         int(a[11]),
         meso=len(a) > 12 and a[12] == "1",
         fcd_period=int(a[13]) if len(a) > 13 else 0,
+        reroute_prob=float(a[14]) if len(a) > 14 else 1.0,
     )

@@ -55,10 +55,9 @@ def run(args) -> int:
     svc_date = _service_wednesday(gtfs)
     print(f"  service date (representative Wed): {svc_date}")
 
-    if area in ("vancouver", "metro"):
-        # gtfs2pt's per-trip routing is intractable on the big all-streets/region
-        # nets (hours); render buses from the GTFS timetable instead. The smaller
-        # peninsula/central nets get real SUMO pt below (buses stop + obey signals).
+    if area == "metro":
+        # the region net is arterials-only/mesoscopic; render buses from the GTFS
+        # timetable (no per-vehicle sim there). Micro nets get real SUMO buses below.
         from etl import transit_schedule
 
         res = transit_schedule.build(net_name, bbox, svc_date)
@@ -72,8 +71,8 @@ def run(args) -> int:
         print(f"  schedule-based buses: {res['buses']} trips -> {Path(res['path']).name}")
         return 0
 
-    if area == "central":
-        # Mid-size all-streets net: build REAL SUMO bus vehicles (stop + obey
+    if area in ("central", "vancouver"):
+        # All-streets micro nets: build REAL SUMO bus vehicles (stop + obey
         # signals) by snapping GTFS stops to edges and routing with duarouter —
         # gtfs2pt is too slow/fragile here, but the buses are real, not scheduled.
         from etl import transit_buses
