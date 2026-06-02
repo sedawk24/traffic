@@ -54,38 +54,66 @@ NAME_TO_CODE = {label: code for code, label, _lon, _lat in CSD}
 
 # Census car-driver mode share (StatCan 98-10-0458 for Greater Vancouver).
 CAR_SHARE = 0.57
-EDGES_PER_CSD = 60  # trip-end pool size per municipality centroid
 
 
-def _edge_pools(net, k: int = EDGES_PER_CSD) -> dict[str, list[str]]:
-    """For each CSD centroid, the k nearest drivable edges (its trip-end pool)."""
-    eids, mids = [], []
+def _edge_pools(net, home_code: str | None = None) -> dict[str, list[str]]:
+    """Map each CSD to a pool of trip-end edges.
+
+    * **metro** (``home_code=None``): a Voronoi split — every edge goes to its
+      nearest CSD centroid, so trip-ends spread across each municipality's whole
+      footprint instead of clustering at a point.
+    * **single city** (``home_code`` set): the home city owns **every** street
+      (intra-city trips spread everywhere, side streets included); every other
+      CSD gets the K city edges nearest it — i.e. the boundary where its demand
+      enters — so no OD pair is dropped just because its centroid lies outside
+      the city net (distant suburbs enter at the nearest city edge)."""
+    drivable = []
     for e in net.getEdges():
         if e.getID().startswith(":") or not e.allows("passenger") or e.getLength() < 30:
             continue
-        shp = e.getShape()
-        eids.append(e.getID())
-        mids.append(shp[len(shp) // 2])
-    pools = {}
-    for code, (lon, lat) in CENTROID.items():
-        cx, cy = net.convertLonLat2XY(lon, lat)
-        order = sorted(range(len(mids)), key=lambda i: (mids[i][0] - cx) ** 2 + (mids[i][1] - cy) ** 2)
-        pools[code] = [eids[i] for i in order[:k]]
+        x, y = e.getShape()[len(e.getShape()) // 2]
+        drivable.append((e.getID(), x, y))
+    cxy = {code: net.convertLonLat2XY(lon, lat) for code, (lon, lat) in CENTROID.items()}
+
+    if home_code:
+        pools = {}
+        for code, (cx, cy) in cxy.items():
+            order = sorted(drivable, key=lambda d: (d[1] - cx) ** 2 + (d[2] - cy) ** 2)
+            pools[code] = [d[0] for d in order[:80]]
+        pools[home_code] = [d[0] for d in drivable]  # the city owns every street
+        return pools
+
+    codes = list(cxy)
+    pools = {code: [] for code in codes}
+    for eid, x, y in drivable:
+        best = min(codes, key=lambda c: (cxy[c][0] - x) ** 2 + (cxy[c][1] - y) ** 2)
+        pools[best].append(eid)
     return pools
 
 
 def build_demand(
-    out_routes: Path, scale: float = 0.10, seed: int = 42, refresh: bool = False
+    out_routes: Path,
+    scale: float = 0.10,
+    seed: int = 42,
+    refresh: bool = False,
+    net_name: str = "metro",
+    home_code: str | None = None,
 ) -> Path:
-    """Generate metro-wide census trips and assign routes with duarouter."""
+    """Generate distributed census trips and assign routes with duarouter.
+
+    Used for both the metro net (region-wide) and the vancouver net. On a
+    single-city net pass ``home_code`` (that city's CSD): its trip-end pool
+    becomes **every** street so intra-city trips spread across the whole city
+    (incl. side streets), while other CSDs keep their boundary cells for the
+    demand that crosses the city edge."""
     if out_routes.exists() and out_routes.stat().st_size > 0 and not refresh:
-        print(f"  metro demand cached: {out_routes.name}")
+        print(f"  {net_name} demand cached: {out_routes.name}")
         return out_routes
 
     import sumolib
 
-    net = sumolib.net.readNet(str(config.SUMO_DIR / "metro.net.xml"))
-    pools = _edge_pools(net)
+    net = sumolib.net.readNet(str(config.SUMO_DIR / f"{net_name}.net.xml"))
+    pools = _edge_pools(net, home_code=home_code)
     rng = random.Random(seed)
 
     conn = db.connect()
@@ -110,8 +138,8 @@ def build_demand(
                 trips.append((_sample_time(AM_WORK, rng), fr, to, "car"))  # AM outbound
                 trips.append((_sample_time(PM_WORK, rng), to, fr, "car"))  # PM return
     print(
-        f"  metro OD pairs used={n_od} (skipped {skipped} unmapped) "
+        f"  {net_name} OD pairs used={n_od} (skipped {skipped} unmapped) "
         f"-> {len(trips)} trips (scale={scale})"
     )
-    _assign(net, trips, out_routes, net_name="metro")
+    _assign(net, trips, out_routes, net_name=net_name)
     return out_routes

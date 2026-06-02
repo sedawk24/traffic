@@ -1,6 +1,6 @@
 # Current State
 
-**Status: Phase 7 (metro-wide expansion) underway — a mesoscopic Greater Vancouver run (27k vehicles, 29.6k-edge regional net) replays in the browser as regional flow ribbons. All six original build phases (0–6) are complete; the calibrated peninsula vertical slice runs end to end.**
+**Status: Phase 8 (full-detail city) underway — a complete microscopic City of Vancouver (76k all-streets edges) replays cars on side streets, buses on real GTFS schedules, and 1,089 live signals. Phase 7 added the mesoscopic metro overview; all six original build phases (0–6) are complete.**
 
 The system architecture and phased build plan are agreed, Phase 0 research is written up, and the SUMO toolchain is verified on this machine (SUMO 1.27 + libsumo on Apple Silicon; FCD XML/Parquet/geo confirmed; ~225k vehicle-updates/sec, ~34× real-time at 8k active vehicles). Project scaffolding (`pyproject.toml`, uv venv) is in place. Phase 1 is complete: the `etl/` package (SQLite schema + idempotent CLI) ingests OSM, TransLink GTFS, StatCan census, and City/Provincial open data into `data/traffic.db` + SUMO inputs for the cordon-trimmed peninsula — a 7,307-edge net, 366 land-use zones, 456 OD flows, 2,618 departure profiles, 254 signals, 4,062 bus departures, and 11 scenarios, across 8 provenance-tracked sources.
 
@@ -79,15 +79,24 @@ The peninsula stack stays microscopic; a second, coarser **metro** study area ru
 - **Run (`sim run --demand metro`).** `metro.net.xml` with `--mesosim` (queue-based) and coarse FCD sampling; transit + per-signal capture skipped (not shown at regional zoom). A scale-0.15 AM peak = **27,241 vehicles, peak 3,043 active**, replaying as flow ribbons.
 - **Serve + view.** `/api/network?net=metro`; the viewer is now **area-aware** (loads each run's network per `params.area`, drops to a regional camera, renders flow ribbons with an adaptive per-run color scale). Per-edge volumes come from the route file for meso runs (the meso FCD carries no lane). Also fixed a duplicate-`id` bug that had left the run-selector dropdown inert.
 
+## Phase 8 — Full-detail city ("complete simulation", in progress)
+
+A third study area — the **whole City of Vancouver, all streets, microscopic** — for the complete zoom-in experience the meso metro net can't give (it's arterials-only). Selected per run via `sim run --demand vancouver`.
+- **Network (`etl network --area vancouver`).** OSM **all drivable streets** (no road-type filter) over `VANCOUVER_BBOX`, tiled → `vancouver.net.xml`: **76,220 edges / 28,021 junctions / 1,089 signals** (residential side streets included).
+- **Demand.** `demand_metro.build_demand(home_code=Vancouver)`: the city owns *every* street so the large intra-Vancouver flow spreads across all of them (side-street traffic); other CSDs get the K city edges nearest them, so distant suburbs **enter at the boundary** rather than being dropped (318 OD pairs vs 41 before the fix).
+- **Buses (`etl transit --area vancouver`).** gtfs2pt's per-trip routing is intractable on 76k edges (hung for >78 min), so large nets use a **GTFS-schedule layer** (`etl/transit_schedule.py`): each bus trip → its stop polyline + scheduled times, animated in the viewer (**1,895 buses** in the AM window, built in ~4 s). Honest tradeoff: scheduled, not traffic-interacting (gtfs2pt's SUMO pt is kept for the peninsula).
+- **Signals.** The micro run captures live per-approach states for all 1,089 signals (as the peninsula does) — they cycle at street zoom.
+- **Run + view.** Microscopic, FCD sampled every 2 s (the all-streets trace is large). The area-aware viewer loads the city net + schedule buses (distinct blue), regional camera, and at street zoom shows individual cars on side streets, buses, and cycling signals. Verified: a scale-0.12 AM peak = 13,345 vehicles / 1,477 peak active; a denser scale-0.30 run follows.
+
 ## What Is In Progress
 
-Phase 7 — the metro view is live. Next within the expansion: metro screenline **calibration**, regional **transit**, finer (sub-municipal) demand, and **LOD hand-off** between the meso region and the micro peninsula. See `docs/development/phases/phase-7.md`.
+Phase 8 — tuning demand **density** (scale 0.30 run) for a fuller-looking city. See `docs/development/phases/phase-8.md`.
 
 ## What Is Next
 
-- **Metro calibration & refinement.** Generalize the peninsula GEH method to regional screenlines (MoTI bridge/highway counts); sub-municipal TAZ demand; regional GTFS transit.
-- **Stronger peninsula calibration.** Verified MoTI TRADAS / CoV counts for Cambie/Burrard; `routeSampler.py` fitting; corridor travel-time checks.
-- **Live data + richer scenarios.** GTFS-Realtime / DriveBC as live feeds; click-to-place accidents/closures; weather/event scenarios.
+- **Density / sub-municipal demand.** Higher micro density on the city net; census-tract/DA origins for neighbourhood accuracy (vs the city-uniform intra-Vancouver spread).
+- **Metro calibration & refinement.** Generalize the peninsula GEH method to regional screenlines; LOD hand-off (auto-switch vancouver↔metro by zoom).
+- **Live data + richer scenarios.** GTFS-Realtime / DriveBC as live feeds; click-to-place accidents/closures.
 
 ## Key References
 
@@ -100,4 +109,4 @@ Phase 7 — the metro view is live. Next within the expansion: metro screenline 
 
 ---
 
-*Last updated: 2026-06-01 (Phase 7 — metro-wide expansion)*
+*Last updated: 2026-06-01 (Phase 8 — full-detail city)*

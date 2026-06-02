@@ -39,6 +39,16 @@ def _area(area: str) -> dict:
             "tiles": 4,
             "use_cordon": False,
         }
+    if area == "vancouver":
+        # Full City of Vancouver: ALL drivable streets (no road-type filter),
+        # tiled to clear Overpass limits, largest-component trim, no cordon.
+        return {
+            "name": "vancouver",
+            "bbox": config.VANCOUVER_BBOX,
+            "road_types": None,
+            "tiles": 4,
+            "use_cordon": False,
+        }
     return {
         "name": "peninsula",
         "bbox": config.PENINSULA_BBOX,

@@ -83,7 +83,7 @@ def _register(args, traj_path, started_at, stats, scenario_name, closure) -> int
     params = {
         "name": args.name,
         "demand": args.demand,
-        "area": "metro" if args.demand == "metro" else "peninsula",
+        "area": _PROFILES.get(args.demand, _DEFAULT_PROFILE)["net"],
         "scale": args.scale,
         "scenario": scenario_name,
         "begin": args.begin,
@@ -108,9 +108,18 @@ def _register(args, traj_path, started_at, stats, scenario_name, closure) -> int
     return rid
 
 
+# Per-demand-model runtime profile: which net, micro/meso, FCD sampling, transit,
+# and whether demand is the distributed (census-OD Voronoi) model.
+_PROFILES = {
+    "metro": {"net": "metro", "meso": True, "fcd_period": 10, "transit": False, "distributed": True, "home": None},
+    "vancouver": {"net": "vancouver", "meso": False, "fcd_period": 2, "transit": True, "distributed": True, "home": "5915022"},
+}
+_DEFAULT_PROFILE = {"net": "peninsula", "meso": False, "fcd_period": 0, "transit": True, "distributed": False, "home": None}
+
+
 def cmd_run(args: argparse.Namespace) -> int:
-    meso = args.demand == "metro"
-    net_name = "metro" if meso else "peninsula"
+    prof = _PROFILES.get(args.demand, _DEFAULT_PROFILE)
+    net_name, meso = prof["net"], prof["meso"]
     net = config.SUMO_DIR / f"{net_name}.net.xml"
     if not net.exists():
         raise SystemExit(f"{net_name}.net.xml not found — run `etl network --area {net_name}` first.")
@@ -131,9 +140,14 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     print(f"=== sim run '{args.name}'  [{args.begin}..{args.end}s]  scenario={scenario_name} ===")
     started = datetime.now().isoformat(timespec="seconds")
-    if args.demand == "metro":
+    if prof["distributed"]:
         demand_metro.build_demand(
-            routes, scale=args.scale, seed=args.seed, refresh=args.refresh_demand
+            routes,
+            scale=args.scale,
+            seed=args.seed,
+            refresh=args.refresh_demand,
+            net_name=net_name,
+            home_code=prof["home"],
         )
     elif args.demand == "census":
         demand_census.build_demand(
@@ -162,7 +176,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             str(routes),
             str(args.begin),
             str(args.end),
-            "0" if (args.no_transit or meso) else "1",
+            "1" if (prof["transit"] and not args.no_transit) else "0",
             str(fcd),
             str(tls_out),
             str(tripinfo),
@@ -170,6 +184,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             str(closure[1]),
             str(closure[2]),
             "1" if meso else "0",
+            str(prof["fcd_period"]),
         ],
         check=True,
         cwd=config.ROOT,
@@ -199,9 +214,9 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--name", default="baseline", help="run name (-> data/runs/<name>/)")
     r.add_argument(
         "--demand",
-        choices=["random", "census", "metro"],
+        choices=["random", "census", "metro", "vancouver"],
         default="random",
-        help="demand model: random, census (peninsula micro), or metro (region-wide meso)",
+        help="demand: random, census (peninsula), vancouver (full-city micro), metro (region meso)",
     )
     r.add_argument("--scale", type=float, default=0.12, help="census demand sub-sampling factor")
     r.add_argument(

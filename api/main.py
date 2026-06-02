@@ -64,17 +64,17 @@ def _ensure_network_geojson(net_name: str = "peninsula") -> Path:
     return out
 
 
-def _ensure_transit_geojson() -> Path:
+def _ensure_transit_geojson(net_name: str = "peninsula") -> Path:
     """Unique transit (bus) route polylines from the SUMO pt routes, as GeoJSON."""
     import xml.etree.ElementTree as ET
 
     import sumolib
 
-    net_file = config.SUMO_DIR / "peninsula.net.xml"
-    rou = config.SUMO_DIR / "peninsula_pt_vehicles.rou.xml"
-    out = config.SUMO_DIR / "peninsula_transit.geojson"
+    net_file = config.SUMO_DIR / f"{net_name}.net.xml"
+    rou = config.SUMO_DIR / f"{net_name}_pt_vehicles.rou.xml"
+    out = config.SUMO_DIR / f"{net_name}_transit.geojson"
     if not rou.exists():
-        raise HTTPException(404, "transit routes missing — run `etl transit`")
+        raise HTTPException(404, f"transit routes missing — run `etl transit --area {net_name}`")
     if out.exists() and out.stat().st_mtime >= rou.stat().st_mtime:
         return out
 
@@ -235,15 +235,29 @@ def signals_live(run_id: int) -> FileResponse:
     return FileResponse(f, media_type="application/json")
 
 
+_AREAS = ("peninsula", "metro", "vancouver")
+
+
 @app.get("/api/network")
 def network(net: str = "peninsula") -> FileResponse:
-    name = net if net in ("peninsula", "metro") else "peninsula"
+    name = net if net in _AREAS else "peninsula"
     return FileResponse(_ensure_network_geojson(name), media_type=GEOJSON_MEDIA)
 
 
 @app.get("/api/transit")
-def transit() -> FileResponse:
-    return FileResponse(_ensure_transit_geojson(), media_type=GEOJSON_MEDIA)
+def transit(net: str = "peninsula") -> FileResponse:
+    name = net if net in _AREAS else "peninsula"
+    return FileResponse(_ensure_transit_geojson(name), media_type=GEOJSON_MEDIA)
+
+
+@app.get("/api/transit-vehicles")
+def transit_vehicles(net: str = "peninsula") -> FileResponse:
+    """Schedule-based bus polylines (large nets) — animated as buses in the viewer."""
+    name = net if net in _AREAS else "peninsula"
+    f = config.SUMO_DIR / f"{name}_bus_schedule.json"
+    if not f.exists():
+        raise HTTPException(404, "no schedule-based buses for this net")
+    return FileResponse(f, media_type="application/json")
 
 
 @app.get("/api/signals")
