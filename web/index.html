@@ -109,6 +109,9 @@ map.addControl(overlay);
 // ---- state ---------------------------------------------------------------
 let T=+Q.get('t')||300, tMax=0, begin=25200, playing=Q.get('play')!=='0', speed=30, last=0, zoom=Z0;
 let trips=[], busTrips=[], busSchedRaw=null, zonesPoly=null, gateways=[], roads=null, transitGeo=null, volMap={}, vehicles=0;
+// windowed trip streaming — dense runs are too big to load whole, so stream the
+// time window being watched (start/end on /api/trips) and reload as time advances
+let curRunId=null, windowed=false, winLo=0, winHi=-1, winBusy=false; const WIN_SPAN=300;
 let sigGroups=[], sigChangesMap={};
 let runsList=[], closedEdges=[], closedMarker=null, closedStart=0, closedEnd=0, scenarioInfo=null;
 // per-area network/zones/transit, loaded on demand and cached
@@ -145,10 +148,29 @@ async function loadArea(area){
   }
 }
 
+// Fetch per-vehicle trips, optionally only for a [lo,hi] time window.
+async function fetchTrips(lo, hi){
+  const ev = windowed ? 3 : 2;   // coarser sampling within a streamed window keeps it light
+  const q = (lo!=null) ? `?every=${ev}&start=${lo}&end=${hi}` : `?every=${ev}`;
+  const w = await fetch(`/api/runs/${curRunId}/trips${q}`).then(r=>r.json());
+  for (const tr of w){ tr.t0=tr.timestamps[0]; tr.tN=tr.timestamps[tr.timestamps.length-1]; }
+  return w;
+}
+// Reload the streamed window when the clock leaves it (dense runs only).
+function ensureWindow(){
+  if (!windowed || winBusy) return;
+  if (T < winLo || T > winHi - 120){
+    winBusy = true;
+    const lo = Math.max(0, Math.floor(T)-30), hi = Math.floor(T)+WIN_SPAN;
+    fetchTrips(lo, hi).then(w => { trips=w; winLo=lo; winHi=hi; winBusy=false; })
+                      .catch(() => { winBusy=false; });
+  }
+}
+
 async function loadRun(id){
-  const [meta, t, vol, sig] = await Promise.all([
+  curRunId = id;
+  const [meta, vol, sig] = await Promise.all([
     fetch(`/api/runs/${id}/meta`).then(r=>r.json()),
-    fetch(`/api/runs/${id}/trips?every=2`).then(r=>r.json()),
     fetch(`/api/runs/${id}/volumes`).then(r=>r.json()),
     fetch(`/api/runs/${id}/signals-live`).then(r=>r.ok?r.json():{pos:{},changes:{}}).catch(()=>({pos:{},changes:{}})),
   ]);
@@ -161,7 +183,11 @@ async function loadRun(id){
       const ts = b.times.map(s=>s-begin);
       busTrips.push({ cls:'bus', path:b.path, timestamps:ts, t0:ts[0], tN:ts[ts.length-1] });
     }
-  vehicles = meta.stats.trajectory.vehicles; trips = t; volMap = vol;
+  vehicles = meta.stats.trajectory.vehicles; volMap = vol;
+  // dense runs: stream a window; small runs: load the whole trace once
+  windowed = vehicles > 8000;
+  if (windowed){ winLo = Math.max(0, Math.floor(T)-30); winHi = Math.floor(T)+WIN_SPAN; trips = await fetchTrips(winLo, winHi); }
+  else { trips = await fetchTrips(null, null); }
   // adaptive flow scale: the 92nd-percentile edge volume maps to "busy" (red),
   // so the ramp works for both peninsula (FCD counts) and metro (route counts)
   const vv = Object.values(vol).sort((a,b)=>a-b);
@@ -178,7 +204,6 @@ async function loadRun(id){
       sigGroups.push({ tls, idxs, position:[lon/idxs.length, lat/idxs.length] });
     }
   }
-  for (const tr of trips){ tr.t0=tr.timestamps[0]; tr.tN=tr.timestamps[tr.timestamps.length-1]; }
   document.getElementById('vcount').textContent = vehicles.toLocaleString();
   document.getElementById('runname').textContent = meta.params.name ?? id;
   document.getElementById('scrub').max = tMax;
@@ -331,7 +356,7 @@ function render(){ overlay.setProps({ layers: layers() });
   document.getElementById('clock').textContent = hms(begin + T);
   document.getElementById('scrub').value = Math.floor(T);
   updateScenarioStatus(); }
-function tick(now){ if (playing && last){ T += (now-last)/1000*speed; if (T>=tMax) T=0; render(); } last=now; requestAnimationFrame(tick); }
+function tick(now){ if (playing && last){ T += (now-last)/1000*speed; if (T>=tMax) T=0; ensureWindow(); render(); } last=now; requestAnimationFrame(tick); }
 map.on('zoom', () => { zoom = map.getZoom(); if (!playing) render(); });
 
 // ---- legend + toggles ----------------------------------------------------
@@ -358,7 +383,7 @@ function buildToggles(){
 
 // ---- controls ------------------------------------------------------------
 document.getElementById('play').onclick = e => { playing=!playing; e.target.textContent=playing?'⏸ Pause':'▶ Play'; last=0; };
-document.getElementById('scrub').oninput = e => { T=+e.target.value; render(); };
+document.getElementById('scrub').oninput = e => { T=+e.target.value; ensureWindow(); render(); };
 document.getElementById('speed').onchange = e => { speed=+e.target.value; };
 </script>
 </body>

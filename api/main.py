@@ -159,15 +159,27 @@ def run_trace(
 
 
 @app.get("/api/runs/{run_id}/trips")
-def run_trips(run_id: int, every: int = Query(3, ge=1, description="sample every Nth second")) -> Response:
-    """Per-vehicle paths + timestamps for a deck.gl TripsLayer (animated trails)."""
+def run_trips(
+    run_id: int,
+    every: int = Query(2, ge=1, description="sample every Nth second"),
+    start: int | None = Query(None, description="window start (relative s); omit for whole run"),
+    end: int | None = Query(None, description="window end (relative s)"),
+) -> Response:
+    """Per-vehicle paths + timestamps. With start/end, only the time window is
+    returned (predicate-pushed at the parquet level) — the viewer streams windows
+    so dense runs (whose full trace is too big to load at once) stay viewable."""
     import pandas as pd
 
     r = _run_row(run_id)
     path = r["trace_path"]
     if not path or not Path(path).exists():
         raise HTTPException(404, "trace file missing")
-    df = pd.read_parquet(path, columns=["t", "id", "cls", "lon", "lat"])
+    filters = []
+    if start is not None:
+        filters.append(("t", ">=", start))
+    if end is not None:
+        filters.append(("t", "<=", end))
+    df = pd.read_parquet(path, columns=["t", "id", "cls", "lon", "lat"], filters=filters or None)
     if every > 1:
         df = df[df["t"] % every == 0]
     df = df.sort_values(["id", "t"])
