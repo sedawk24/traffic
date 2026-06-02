@@ -247,7 +247,7 @@ def signals_live(run_id: int) -> FileResponse:
     return FileResponse(f, media_type="application/json")
 
 
-_AREAS = ("peninsula", "metro", "vancouver")
+_AREAS = ("peninsula", "metro", "vancouver", "central")
 
 
 @app.get("/api/network")
@@ -297,7 +297,9 @@ def signals() -> Response:
 @app.get("/api/zones")
 def zones(net: str = "peninsula") -> FileResponse:
     name = net if net in _AREAS else "peninsula"
-    z = config.ZONES_DIR / ("zones.geojson" if name == "peninsula" else f"{name}_zones.geojson")
+    # the peninsula has its own cordon-clipped zones (with gateways); every other
+    # area shares the whole-City-of-Vancouver land use so it covers the full city.
+    z = config.ZONES_DIR / ("zones.geojson" if name == "peninsula" else "vancouver_zones.geojson")
     if not z.exists():
         raise HTTPException(404, f"zones for {name} missing — run `etl zoning --area {name}`")
     return FileResponse(z, media_type=GEOJSON_MEDIA)

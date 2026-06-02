@@ -118,6 +118,22 @@ _PROFILES = {
 _DEFAULT_PROFILE = {"net": "peninsula", "meso": False, "fcd_period": 0, "transit": True, "distributed": False, "home": None}
 
 
+def _use_routes_file(src: Path, dst: Path) -> None:
+    """Copy pre-made routes (e.g. duaIterate equilibrium output) into the run dir,
+    decompressing if gzipped, so the run replays them instead of fresh demand."""
+    import gzip
+    import shutil
+
+    if not src.exists():
+        raise SystemExit(f"--routes-file {src} not found")
+    if src.suffix == ".gz":
+        with gzip.open(src, "rb") as fi, open(dst, "wb") as fo:
+            shutil.copyfileobj(fi, fo)
+    else:
+        shutil.copy(src, dst)
+    print(f"  using pre-made routes: {src.name} -> {dst.name}")
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     prof = _PROFILES.get(args.demand, _DEFAULT_PROFILE)
     net_name, meso = prof["net"], prof["meso"]
@@ -141,7 +157,9 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     print(f"=== sim run '{args.name}'  [{args.begin}..{args.end}s]  scenario={scenario_name} ===")
     started = datetime.now().isoformat(timespec="seconds")
-    if prof["distributed"]:
+    if args.routes_file:
+        _use_routes_file(Path(args.routes_file), routes)
+    elif prof["distributed"]:
         demand_metro.build_demand(
             routes,
             scale=args.scale,
@@ -187,6 +205,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             str(closure[2]),
             "1" if meso else "0",
             str(prof["fcd_period"]),
+            str(args.reroute_prob),
         ],
         check=True,
         cwd=config.ROOT,
@@ -233,6 +252,17 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--seed", type=int, default=42)
     r.add_argument("--no-transit", action="store_true", help="exclude the Phase-1 bus pt")
     r.add_argument("--refresh-demand", action="store_true", help="regenerate routes")
+    r.add_argument(
+        "--routes-file",
+        default=None,
+        help="replay pre-made routes (e.g. a duaIterate equilibrium) instead of generating demand",
+    )
+    r.add_argument(
+        "--reroute-prob",
+        type=float,
+        default=1.0,
+        help="online rerouting probability (0 disables — use 0 with equilibrium routes)",
+    )
 
     c = sub.add_parser("calibrate", help="compare a baseline run to bridge counts (GEH)")
     c.add_argument("--run", required=True, help="baseline run name to calibrate against")
