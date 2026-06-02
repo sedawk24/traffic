@@ -57,6 +57,11 @@ def run(
                 p = config.SUMO_DIR / fn
                 if p.exists():
                     add_files.append(str(p))
+    # demand-adapted signal timings (tlsCycleAdaptation), program "a" — loaded
+    # here, switched on after start so the net flows at higher density.
+    tls_add = config.SUMO_DIR / f"{net_name}_tls_cycle.add.xml"
+    if tls_add.exists():
+        add_files.append(str(tls_add))
 
     cmd = [
         sumolib.checkBinary("sumo"),
@@ -105,6 +110,12 @@ def run(
     # for meso: thousands of regional TLS aren't shown at regional zoom and the
     # per-step capture would dominate runtime + trace size.
     ids = [] if meso else libsumo.trafficlight.getIDList()
+    if tls_add.exists() and not meso:  # activate the demand-adapted signal program
+        for t in ids:
+            try:
+                libsumo.trafficlight.setProgram(t, "a")
+            except Exception:  # noqa: BLE001 — TLS without an adapted program keep default
+                pass
     pos, edges = {}, {}
     for t in ids:
         stoplines, es = [], []

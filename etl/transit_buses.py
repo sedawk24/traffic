@@ -97,7 +97,9 @@ def build(net_name: str, bbox, svc_date: str, window=(24000, 32400)) -> dict:
     n_written = 0
     with open(trips_xml, "w") as f:
         f.write("<routes>\n")
-        for i, (t0, pts) in enumerate(bts):
+        # MUST be sorted by depart — SUMO silently drops out-of-order vehicles
+        # from a route file (this is why most buses never ran).
+        for i, (t0, pts) in enumerate(sorted(bts, key=lambda x: x[0])):
             edges = []
             for lon, lat in pts:
                 eid = snap(lon, lat)
@@ -105,7 +107,12 @@ def build(net_name: str, bbox, svc_date: str, window=(24000, 32400)) -> dict:
                     edges.append(eid)
             if len(edges) < 2:
                 continue
-            f.write(f'  <trip id="bus.{i}" type="bus" depart="{t0}" from="{edges[0]}" to="{edges[-1]}">\n')
+            # departLane/Speed=best/max so a 12m bus can still enter dense traffic
+            # (otherwise it fails to insert at its scheduled second and is dropped)
+            f.write(
+                f'  <trip id="bus.{i}" type="bus" depart="{t0}" departLane="best" '
+                f'departSpeed="max" from="{edges[0]}" to="{edges[-1]}">\n'
+            )
             for eid in edges[1:-1]:  # a dwell stop at every intermediate stop
                 f.write(f'    <stop edge="{eid}" duration="{DWELL}"/>\n')
             f.write("  </trip>\n")
