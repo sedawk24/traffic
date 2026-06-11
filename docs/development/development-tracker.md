@@ -17,6 +17,7 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 | 6 | Scale & calibrate (best-effort quantitative) | Complete |
 | 7 | Metro-wide expansion (mesoscopic region) | In Progress |
 | 8 | Full-detail city (complete micro simulation) | In Progress |
+| 9 | Intersection capacity v2 + dark-cinematic viewer | In Progress |
 
 **v1 north star:** a polished, fully-working vertical slice on the **downtown Vancouver peninsula** (cordoned at the bridges). Region-wide coverage is a later expansion, not a v1 gate.
 
@@ -218,10 +219,35 @@ Detailed phase-by-phase development progress for the **Greater Vancouver Traffic
 
 ---
 
+## Phase 9: Intersection capacity v2 + dark-cinematic viewer (In Progress)
+
+Plan: `docs/development/phases/phase-9.md`. Raise the Phase-8c capacity ceiling honestly (more visible traffic), fix the worst jam chokepoints, and overhaul the viewer (dark-cinematic + 3D buildings, follow-vehicle, hotspot panel).
+
+### Tasks
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| A | Diagnostics: `sim diagnose`, librun aggregate outputs, CoV signals `--area` + `kind`, `/hotspots` API | Done | Run #40 ranked: top-15 jams = 32 % of 1,757 stopped veh·h; Chinatown funnel (demand gateways) + meso-priced equilibrium identified; net has 700 TLS nodes vs ~298 real CoV vehicle signals |
+| B | Capacity v2: sweep harness + variant ladder (gateways, signal truthing, turn lanes, insertion, equilibrium w/ junction control) + `central_v2` showcase | In Progress | Gate: at scale 0.075 mean ≥15 km/h; calibrate GEH holds |
+| C | Viewer overhaul: ES modules, dark basemap, glow ribbons, sprites, trails, HUD, timeline | Not Started | Develops against run #40, parallel to B compute |
+| D | Extras: 3D buildings + tilt, follow-vehicle, hotspot panel, screenshot/smoke tooling | Not Started | |
+
+### Verification
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Worst-10 run-#40 junctions named + ground-truthed (gate A) | Done | `data/runs/central_final/hotspots.json`; Main/Hastings corridor + priority-junction pathology |
+| S\* ≥ 0.075 flowing (mean ≥ 15 km/h, %stopped ≤ 45, teleports ≈ 0) | Pending | `sim sweep` table |
+| Old top-10 stop veh·h −≥ 40 %, GEH Granville/Cambie < 5 | Pending | diagnose before/after + `sim calibrate` |
+| Dark-cinematic viewer + extras render (smoke + screenshots) | Pending | `scripts/smoke_viewer.py`, `docs/images/` |
+
+---
+
 ## Change Log
 
 | Date | Phase | Change |
 |------|-------|--------|
+| 2026-06-11 | 9 | **Phase 9 started — diagnostics first (Phase A done).** New `sim diagnose --run <name>`: ranks junctions by stopped vehicle-hours from the raw FCD (edge stops → downstream junction, internal-lane stops → that junction), names junctions from the cached OSM extract, and cross-references each against the **real CoV signal inventory** (new `kind` column; `etl signals --area central|vancouver` loads the city-wide dataset — central: 481 signals = 298 vehicle + 180 ped-only; the net has **700 TLS nodes, 250 with no CoV device** = over-guessed). librun now also emits `edgedata.xml`/`stats.xml`/`summary.xml`; new `/api/runs/{id}/hotspots`. **Findings on run #40:** top-15 junctions hold 32 % of 1,757 stopped veh·h; ranks 1–4, 7, 9, 12–15 are one standing queue along Main/Hastings/Powell/Gore — caused by the demand model funneling ALL eastern-region OD into each CSD's 80 *nearest* (NE-corner side-street) edges; several priority junctions show 440–790 s stopped/vehicle (meso-computed equilibrium routes replayed under micro gap-acceptance). The 250 bogus TLS are background drag, not the top jams → Phase B ladder re-ranked: gateway realism first, signal truthing second. |
 | 2026-06-02 | 8c | **Capacity ceiling found — the central district's honest limit (corrects the entry below).** The "11,356 on-road, 0 teleported, busy and flowing" claim in the entry below was **measured to be gridlocked, not flowing** — FCD showed **84 % of vehicles stopped at ~5 km/h**; "0 teleported" only means no car was stuck >120 s in one spot. Two more real fixes + a definitive finding. **(a) Residential-speed bug (structural).** The net modeled residential at **50 km/h (= arterials)** with no stop signs, so it was rebuilt with a `central_types.typ.xml` override (~30 km/h; `etl network` applies it as a final type-file, edge IDs stay stable so buses/signals/routes survive) → through-traffic structurally stays on arterials (one-shot residential vehicle-km **35 %→18 %**). **(b) Signal de-clutter.** Viewer merges the approach-dots piled at complex netconvert-joined junctions (they read as "broken lights" but cycle normally — verified). **The ceiling (measured by density sweep + FCD speeds):** `central` flows realistically only up to **~scale 0.05** (run #40: 2,370 on-road peak, **16.6 km/h**, residential quiet); 0.04→22, 0.06→11, 0.075→11, 0.10→6 km/h. It is **NOT lanes** (busiest arterials are 3-lane at ~11 % volume) and **NOT green-split timing** (`tlsCycleAdaptation` Webster re-timing + `--ignore-junction-blocker` anti-spillback each moved it 0 km/h); only `tlsCoordinator` coordination helped (~15 %). Above ~0.05 is fundamental oversaturation of the dense signalized grid — "packed AND flowing" is a bigger network/demand project (backlog). |
 | 2026-06-02 | 8c | **Route equilibrium + road hierarchy + signal coordination — a realistic busy district.** Getting "busy *and* flowing *and* realistic" took three linked fixes. **(1) Equilibrium routing.** One-shot shortest-path routing gridlocked the auto-net above scale ~0.06 (all cars on the same arterials), yet scaling down left it near-empty. SUMO `duaIterate.py` (7 meso iterations, `central` net, scale 0.15, 50,392 routable trips) drove traffic to **user-equilibrium**; replayed micro with online rerouting **off** so the converged routes are *followed* — new `sim run --routes-file <equil> --reroute-prob 0` (librun rerouting prob/threads parameterized; trips pre-filtered to routable + vTypes inlined so duaIterate runs clean). Gave 10,452 peak on-road, 0 stuck (vs one-shot 21 % gridlocked). **(2) Road hierarchy.** That equilibrium *over-spread onto residential side streets* (W 12th jammed while Broadway sat empty) because duarouter routes on time only and the net models residential at 44 km/h ≈ arterials with no stop signs. Re-ran duaIterate with `--weights.priority-factor 4` + `--weights.minor-penalty 12` → arterial vehicle-km **64 %→76 %**, residential **35 %→23 %**, busiest residential street **539→260 veh**, the W 12th rat-run gone. **(3) Signal coordination.** Concentrating traffic back onto the arterials saturated them (avg wait 1,035→1,258 s); `tlsCoordinator` green-wave offsets (502 signals, computed from the equilibrium flows; librun now prefers `*_tls_coord.add.xml` over the per-intersection cycle program) cut wait **−16 %** and raised throughput **+9 %** (1-hour A/B). **Final (run #31, 07:00–09:30): 11,356 peak on-road, avg wait 1,071 s, 0 teleported** — traffic on the right roads, signals coordinated, busy, nothing broken-gridlocked. Deeper ceiling (arterial lane capacity, whole-city equilibrium) → backlog. |
 | 2026-06-02 | 8b | **Land use for central/vancouver areas.** Zones (land-use coloring) were only built for the peninsula (clipped to the downtown cordon), so central runs showed no land use. Generalized `etl zoning --area` to clip the city zoning to any area's bbox; `/api/zones?net=` + the viewer now serve/load per-area zones. Refined the CD-blanket-maps-to-downtown-core heuristic geographically (downtown-core only inside the downtown peninsula; West-Side CD -> residential): central 429->239 downtown-core, 159->349 residential. Flow ribbons only cover the district net (the wider region is the metro area). |

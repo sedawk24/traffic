@@ -100,9 +100,15 @@ A long push to make the `central` district "busy *and* flowing" landed on an hon
 
 **Deliverable (run #40, `central`, scale 0.05, 07:00–09:30): 2,370 on-road at the peak, mean speed 16.6 km/h** — the busiest density that still flows: a realistic congested AM rush hour, arterials busy-but-moving and residential genuinely quiet. View: `/?run=40&t=4500`. "Packed *and* flowing" is past this network's ceiling (see #5) → a bigger network/demand project, backlogged.
 
+## Phase 9 — Intersection capacity v2 + dark-cinematic viewer (in progress)
+
+The push past the Phase-8c ceiling, driven by three user complaints: too little visible traffic at street zoom, terrible jams at specific intersections, and a lackluster viewer. Plan: `docs/development/phases/phase-9.md`.
+
+**Phase A (diagnostics) is done.** New `sim diagnose --run <name>` ranks junctions by stopped vehicle-hours from a run's FCD, names them from the OSM extract, and ground-truths each against the **real CoV signal inventory** (`etl signals --area central` — new `kind` column; 481 signals in the central bbox = 298 vehicle + 180 ped-only, vs **700 TLS junction nodes in the net, 250 with no real device**). librun now emits `edgedata.xml`/`stats.xml`/`summary.xml`; `/api/runs/{id}/hotspots` serves the ranking. **Diagnosis of run #40:** the top-15 junctions hold 32 % of all stopped time; ranks 1–4, 7, 9, 12–15 are one standing queue along Main/Hastings/Powell/Gore — the demand model funnels ALL eastern-region OD into each CSD's 80 *nearest* edges (NE-corner side streets); several priority junctions show 440–790 s stopped per vehicle (the meso-computed equilibrium ignores priority-junction friction that the micro replay enforces). The 250 over-guessed signals are distributed drag, not the headline jams. Phase B's fix ladder was re-ranked accordingly: demand-gateway realism first, signal ground-truthing second, then turn lanes, insertion attrs, equilibrium with `--meso-junction-control`.
+
 ## What Is In Progress
 
-Phase 8c — **whole-city route equilibrium.** The central district (equilibrium + arterial bias + signal coordination) is done and proves the approach; extending it to the full 76k-edge city net is a longer (multi-hour) job. The deeper ceiling — the net's effective capacity is ~half of real — now wants **lane-count corrections** (OSM under-tags arterial lanes; signal coordination is already in) to flow at true demand. See `docs/development/phases/phase-8.md`.
+Phase 9 — see above. (Phase 8c whole-city equilibrium remains queued behind it: extending the central-district approach to the full 76k-edge city net is a multi-hour job, and Phase 9's net fixes should land first so the big run inherits them.)
 
 ## What Is Next
 
@@ -122,4 +128,4 @@ Phase 8c — **whole-city route equilibrium.** The central district (equilibrium
 
 ---
 
-*Last updated: 2026-06-02 (Phase 8c — route equilibrium: busy and flowing)*
+*Last updated: 2026-06-11 (Phase 9A — jam diagnostics: hotspots named and ground-truthed)*

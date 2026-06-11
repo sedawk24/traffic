@@ -70,6 +70,18 @@ def run(
     if tls_add.exists():
         add_files.append(str(tls_add))
 
+    # cheap aggregate outputs every run gets (Phase 9 diagnostics): per-edge
+    # 5-min aggregates (sim diagnose), teleport/insertion statistics and a 60s
+    # network summary (sim sweep). All land beside the FCD in the run dir.
+    run_dir = fcd_out.parent
+    edgedata_add = run_dir / "edgedata.add.xml"
+    edgedata_add.write_text(
+        '<additional>\n  <edgeData id="ed300" period="300" '
+        f'file="{run_dir / "edgedata.xml"}" excludeEmpty="true" minSamples="1"/>\n'
+        "</additional>\n"
+    )
+    add_files.append(str(edgedata_add))
+
     cmd = [
         sumolib.checkBinary("sumo"),
         "-n",
@@ -82,6 +94,12 @@ def run(
         "true",
         "--tripinfo-output",
         str(tripinfo_out),
+        "--statistic-output",
+        str(run_dir / "stats.xml"),
+        "--summary-output",
+        str(run_dir / "summary.xml"),
+        "--summary-output.period",
+        "60",
         "--device.rerouting.probability",
         str(reroute_prob),
         "--device.rerouting.period",

@@ -74,12 +74,16 @@ CREATE TABLE IF NOT EXISTS departure_profiles (
 );
 
 -- Traffic-signal locations (City of Vancouver); mapped to SUMO TLS where possible.
+-- kind = the CoV signal type (Fixed Time / Semi Actuated / Fully Actuated /
+-- Pedestrian Actuated Signal / RRFB / ...), used to ground-truth which net
+-- junctions deserve a vehicle signal (Phase 9).
 CREATE TABLE IF NOT EXISTS signals (
     signal_id   TEXT PRIMARY KEY,
     name        TEXT,
     lon         REAL,
     lat         REAL,
     sumo_tls_id TEXT,
+    kind        TEXT,
     source      TEXT
 );
 

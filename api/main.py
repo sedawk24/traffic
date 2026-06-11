@@ -247,6 +247,16 @@ def signals_live(run_id: int) -> FileResponse:
     return FileResponse(f, media_type="application/json")
 
 
+@app.get("/api/runs/{run_id}/hotspots")
+def hotspots(run_id: int) -> FileResponse:
+    """Ranked jammed junctions (the viewer's hotspot panel)."""
+    r = _run_row(run_id)
+    f = Path(r["trace_path"]).with_name("hotspots.json")
+    if not f.exists():
+        raise HTTPException(404, "no hotspots for this run — run `sim diagnose --run <name>`")
+    return FileResponse(f, media_type="application/json")
+
+
 _AREAS = ("peninsula", "metro", "vancouver", "central")
 
 

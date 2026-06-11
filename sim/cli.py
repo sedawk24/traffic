@@ -266,6 +266,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("calibrate", help="compare a baseline run to bridge counts (GEH)")
     c.add_argument("--run", required=True, help="baseline run name to calibrate against")
+
+    d = sub.add_parser("diagnose", help="rank jammed junctions from a run's FCD (hotspots)")
+    d.add_argument("--run", required=True, help="run name to analyze (e.g. central_final)")
+    d.add_argument("--top", type=int, default=10, help="junctions to print (3x kept in json)")
+    d.add_argument("--write-geojson", action="store_true", help="also emit hotspots.geojson")
     return p
 
 
@@ -277,4 +282,8 @@ def main(argv: list[str] | None = None) -> int:
         from sim import calibrate
 
         return calibrate.cmd_calibrate(args)
+    if args.command == "diagnose":
+        from sim import diagnose
+
+        return diagnose.cmd_diagnose(args)
     return 1

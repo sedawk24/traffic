@@ -29,12 +29,24 @@ def connect(db_path: str | Path | None = None) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     """Create the schema if absent and stamp the schema version. Idempotent."""
     conn.executescript(SCHEMA_SQL.read_text())
+    _migrate(conn)
     conn.execute(
         "INSERT INTO meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (str(SCHEMA_VERSION),),
     )
     conn.commit()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive column migrations for DBs created under an older schema.
+
+    schema.sql only runs CREATE IF NOT EXISTS, so columns added later must be
+    grafted onto existing tables here (guarded by PRAGMA table_info).
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(signals)")}
+    if cols and "kind" not in cols:
+        conn.execute("ALTER TABLE signals ADD COLUMN kind TEXT")
 
 
 def record_source(
