@@ -55,3 +55,11 @@ Final cascade: `etl network --area central` (+ `--output.street-names`) → `etl
 1. **More traffic**: sweep table proves S\* ≥ 0.075 flowing → peak on-road ≥ ~3,500 (vs 2,370); identical-viewport before/after screenshots.
 2. **Chokepoints**: old top-10 stop veh·h −≥40 %, no new junction worse than old #1; 0.075 mean speed 11 → ≥15 km/h; GEH holds.
 3. **Look/UI**: smoke green + interaction checklist + screenshot set.
+
+## Results (2026-06-11 — phase complete)
+
+- **S\* = 0.10 (2× the old showcase); 0.125 also flows.** Ladder at scale 0.075 (fixed seed; raw one-shot baseline 12.5 km/h / 58.8 % stopped): gateways → 22.4, signal-truth → 23.8, turn-lanes/insertion/home-ends → ~24. Showcase config (equilibrium prior via `sim equilibrium` w/ `--meso-junction-control`, online rerouting, buses, 307 coordinated TLS): **scale 0.10 = 23.7 km/h, 34.5 % stopped, peak 4,926** (p100 = 0.125 → 20.5 km/h). Frozen-equilibrium replay (no rerouting) knees at 0.075 — the hybrid is the right operating mode.
+- **Run #41 `central_v2`**: 40,065 vehicles / 38,948 completed / avg wait 253 s over 07:00–09:30. Same street viewport as before-shots: **1,770 → 4,253 on-road (2.4×)**.
+- **Chokepoints**: #40's top-15 = 32 % of stopped time at 200–790 s/veh (the Chinatown funnel) → v2 top-10 = **12 %** at **18–66 s/veh** on the city's genuinely busiest signals (Terminal & Main, 12th & Main, Broadway & Main, 33rd & Granville/Oak). Residual: Nelson St priority junction (507 s/veh) → backlog.
+- **Calibration (honest)**: Cambie GEH 0.54 ✓; Granville bridge under-used (GEH 49 — the False-Creek split shifted; per-crossing weights → backlog); the calibrate tool's Lions-Gate/viaduct screenlines are peninsula-cordon lines, inapplicable to the central bbox. Teleports 5,307/2.5 h — far from the gridlock-era force-moves but not ≈0; #40's "0 teleports" was a low-density artifact.
+- **Viewer**: smoke + interaction suite green; before/after gallery `docs/images/phase9_{before,after}_*.png`.

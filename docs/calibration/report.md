@@ -6,19 +6,19 @@ volumes against published counts. Calibration is data-limited by design
 per-site with no bulk API, so the targets below are the *obtainable subset*
 with confidence noted. GEH < 5 is the accepted good-match threshold.
 
-- **Result:** 5/5 screenlines within GEH < 5;  mean GEH 1.22.
+- **Result:** 1/5 screenlines within GEH < 5;  mean GEH 37.76.
 - **Gateway split:** corrected via per-gateway demand weights (below) — the
   Phase-4 model over-fed the east viaduct and starved Lions Gate.
-- **Demand magnitude:** the observed counts correspond to a full-demand scale of ~3.24 (≈18.0x the replay sub-sample 0.18 used by `am_base`). Full-real-demand microsimulation exceeds SUMO's single-core ceiling (the project's core constraint), so replay sub-samples; gateway *shares* are scale-invariant, so the split calibration holds at the replay scale.
+- **Demand magnitude:** the observed counts correspond to a full-demand scale of ~0.64 (≈5.3x the replay sub-sample 0.12 used by `central_v2`). Full-real-demand microsimulation exceeds SUMO's single-core ceiling (the project's core constraint), so replay sub-samples; gateway *shares* are scale-invariant, so the split calibration holds at the replay scale.
 - **AM peak window:** 07:30-08:30; observed = AADT x K_AM (see `etl/calibration.py`).
 
 | Gateway | Observed (veh/h) | Simulated (veh/h) | GEH | Confidence |
 |---------|------------------:|------------------:|----:|------------|
-| gw_georgia_viaduct | 3,600.0 | 3,600 | 0.00 | medium |
-| gw_granville_bridge | 5,850.0 | 5,886 | 0.47 | medium |
-| gw_cambie_bridge | 4,950.0 | 4,914 | 0.51 | low |
-| gw_burrard_bridge | 4,500.0 | 4,410 | 1.35 | low |
-| gw_lions_gate | 5,004.0 | 5,274 | 3.77 | high |
+| gw_cambie_bridge | 4,950.0 | 4,912 | 0.54 | low |
+| gw_burrard_bridge | 4,500.0 | 5,248 | 10.71 ❌ | low |
+| gw_georgia_viaduct | 3,600.0 | 2,075 | 28.63 ❌ | medium |
+| gw_granville_bridge | 5,850.0 | 2,661 | 48.89 ❌ | medium |
+| gw_lions_gate | 5,004.0 | 0 | 100.04 ❌ | high |
 
 ## Gateway demand weights (the split calibration)
 
