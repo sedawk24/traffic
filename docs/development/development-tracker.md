@@ -228,9 +228,9 @@ Plan: `docs/development/phases/phase-9.md`. Raise the Phase-8c capacity ceiling 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | A | Diagnostics: `sim diagnose`, librun aggregate outputs, CoV signals `--area` + `kind`, `/hotspots` API | Done | Run #40 ranked: top-15 jams = 32 % of 1,757 stopped veh·h; Chinatown funnel (demand gateways) + meso-priced equilibrium identified; net has 700 TLS nodes vs ~298 real CoV vehicle signals |
-| B | Capacity v2: sweep harness + variant ladder (gateways, signal truthing, turn lanes, insertion, equilibrium w/ junction control) + `central_v2` showcase | In Progress | Gate: at scale 0.075 mean ≥15 km/h; calibrate GEH holds |
-| C | Viewer overhaul: ES modules, dark basemap, glow ribbons, sprites, trails, HUD, timeline | Not Started | Develops against run #40, parallel to B compute |
-| D | Extras: 3D buildings + tilt, follow-vehicle, hotspot panel, screenshot/smoke tooling | Not Started | |
+| B | Capacity v2: sweep harness + variant ladder (gateways, signal truthing, turn lanes, insertion, equilibrium w/ junction control) + `central_v2` showcase | In Progress | V0 baseline 12.5 km/h @0.075 → V1 gateways 22.4 (+79 %) → V2 signal-truth 23.8; V3 turn-lanes in flight |
+| C | Viewer overhaul: ES modules, dark basemap, glow ribbons, sprites, trails, HUD, timeline | Done | Verified: smoke green + street/flow screenshots vs before |
+| D | Extras: 3D buildings + tilt, follow-vehicle, hotspot panel, screenshot/smoke tooling | Done | Interaction suite green (hotspot flyTo, pitch 55, follow chip, playback) |
 
 ### Verification
 
