@@ -40,6 +40,7 @@ def run(
     meso: bool = False,
     fcd_period: int = 0,
     reroute_prob: float = 1.0,
+    use_tls_add: bool = True,
 ) -> None:
     import libsumo
     import sumolib
@@ -67,8 +68,23 @@ def run(
     tls_cycle = config.SUMO_DIR / f"{net_name}_tls_cycle.add.xml"
     tls_add = tls_coord if tls_coord.exists() else tls_cycle
     tls_program = None if tls_coord.exists() else "a"
+    if not use_tls_add:  # sweep A/Bs compare raw nets; coordination is layered later
+        tls_add = Path("/nonexistent")
+        tls_program = None
     if tls_add.exists():
         add_files.append(str(tls_add))
+
+    # cheap aggregate outputs every run gets (Phase 9 diagnostics): per-edge
+    # 5-min aggregates (sim diagnose), teleport/insertion statistics and a 60s
+    # network summary (sim sweep). All land beside the FCD in the run dir.
+    run_dir = fcd_out.parent
+    edgedata_add = run_dir / "edgedata.add.xml"
+    edgedata_add.write_text(
+        '<additional>\n  <edgeData id="ed300" period="300" '
+        f'file="{run_dir / "edgedata.xml"}" excludeEmpty="true" minSamples="1"/>\n'
+        "</additional>\n"
+    )
+    add_files.append(str(edgedata_add))
 
     cmd = [
         sumolib.checkBinary("sumo"),
@@ -82,6 +98,12 @@ def run(
         "true",
         "--tripinfo-output",
         str(tripinfo_out),
+        "--statistic-output",
+        str(run_dir / "stats.xml"),
+        "--summary-output",
+        str(run_dir / "summary.xml"),
+        "--summary-output.period",
+        "60",
         "--device.rerouting.probability",
         str(reroute_prob),
         "--device.rerouting.period",
@@ -194,4 +216,5 @@ if __name__ == "__main__":
         meso=len(a) > 12 and a[12] == "1",
         fcd_period=int(a[13]) if len(a) > 13 else 0,
         reroute_prob=float(a[14]) if len(a) > 14 else 1.0,
+        use_tls_add=a[15] == "1" if len(a) > 15 else True,
     )

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 
-from etl import calibration, census, config, db, events, network, signals, transit, zoning
+from etl import calibration, census, config, db, events, network, signal_truth, signals, transit, zoning
 
 # Ordered: network first (the geographic spine everything else attaches to).
 STEPS = {
@@ -20,6 +20,7 @@ STEPS = {
     "census": census.run,
     "transit": transit.run,
     "signals": signals.run,
+    "signal-truth": signal_truth.run,
     "events": events.run,
     "calibrate": calibration.run,
 }
@@ -78,12 +79,16 @@ def build_parser() -> argparse.ArgumentParser:
     for name in STEPS:
         step_p = sub.add_parser(name, help=f"run the {name} loader")
         step_p.add_argument("--refresh", action="store_true", help="re-download source data")
-        if name in ("network", "transit", "zoning"):
+        if name in ("network", "transit", "zoning", "signals", "signal-truth"):
             step_p.add_argument(
                 "--area",
                 choices=["peninsula", "metro", "vancouver", "central"],
                 default="peninsula",
                 help="study area: peninsula/central/vancouver (micro) or metro (meso, arterials)",
+            )
+        if name == "signal-truth":
+            step_p.add_argument(
+                "--dry-run", action="store_true", help="write decision lists, leave the net unchanged"
             )
     return parser
 

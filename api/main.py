@@ -26,19 +26,54 @@ def _run_row(run_id: int) -> dict:
     conn.close()
     if row is None:
         raise HTTPException(404, f"run {run_id} not found")
-    return dict(row)
+    d = dict(row)
+    # registry stores absolute trace paths; remap onto this checkout's data/
+    # so a copied repo (laptop, other machine) still finds its runs
+    p = Path(d.get("trace_path") or "")
+    if d.get("trace_path") and not p.exists() and "runs" in p.parts:
+        i = p.parts.index("runs")
+        local = config.DATA_DIR.joinpath(*p.parts[i:])
+        if local.exists():
+            d["trace_path"] = str(local)
+    return d
 
 
 def _ensure_network_geojson(net_name: str = "peninsula") -> Path:
-    """Convert the SUMO net edges to a (cached) GeoJSON of lon/lat LineStrings."""
+    """Convert the SUMO net edges to a (cached) GeoJSON of lon/lat LineStrings.
+
+    v2 adds the street ``name`` per edge (the net's name attr when built with
+    --output.street-names, else recovered from the cached OSM extract via the
+    edge-id's OSM way id) — the viewer's hover tooltips read it."""
     net_file = config.SUMO_DIR / f"{net_name}.net.xml"
-    out = config.SUMO_DIR / f"{net_name}_edges.geojson"
+    out = config.SUMO_DIR / f"{net_name}_edges_v2.geojson"
     if not net_file.exists():
         raise HTTPException(404, f"{net_name}.net.xml missing — run `etl network --area {net_name}`")
     if out.exists() and out.stat().st_mtime >= net_file.stat().st_mtime:
         return out
 
+    import re
+
     import sumolib
+
+    way_names: dict[int, str] = {}
+    try:  # name fallback for nets built before --output.street-names
+        import xml.etree.ElementTree as ET
+
+        for f in sorted(config.OSM_DIR.glob(f"{net_name}*_*.osm.xml")) or sorted(
+            config.OSM_DIR.glob(f"{net_name}_*.osm.xml")
+        ):
+            for _ev, el in ET.iterparse(str(f), events=("end",)):
+                if el.tag == "way":
+                    for tag in el.findall("tag"):
+                        if tag.get("k") == "name":
+                            way_names[int(el.get("id"))] = tag.get("v")
+                            break
+                    el.clear()
+                elif el.tag == "node":
+                    el.clear()
+    except Exception:  # noqa: BLE001 — names are a nicety, never fail the endpoint
+        way_names = {}
+    way_re = re.compile(r"^-?(\d+)")
 
     net = sumolib.net.readNet(str(net_file))
     features = []
@@ -48,6 +83,10 @@ def _ensure_network_geojson(net_name: str = "peninsula") -> Path:
         coords = [list(net.convertXY2LonLat(x, y)) for x, y in e.getShape()]
         spd = e.getSpeed()
         klass = "arterial" if spd >= 16 else "collector" if spd >= 11 else "local"
+        name = e.getName()
+        if not name:
+            m = way_re.match(e.getID())
+            name = way_names.get(int(m.group(1))) if m else None
         features.append(
             {
                 "type": "Feature",
@@ -56,6 +95,7 @@ def _ensure_network_geojson(net_name: str = "peninsula") -> Path:
                     "lanes": e.getLaneNumber(),
                     "speed": round(spd, 1),
                     "class": klass,
+                    "name": name or "",
                 },
                 "geometry": {"type": "LineString", "coordinates": coords},
             }
@@ -185,11 +225,12 @@ def run_trips(
     df = df.sort_values(["id", "t"])
     trips = [
         {
+            "vid": str(vid),
             "cls": str(g["cls"].iloc[0]),
             "path": g[["lon", "lat"]].round(6).values.tolist(),
             "timestamps": g["t"].astype(int).tolist(),
         }
-        for _, g in df.groupby("id", sort=False)
+        for vid, g in df.groupby("id", sort=False)
         if len(g) > 1
     ]
     return Response(json.dumps(trips), media_type="application/json")
@@ -247,6 +288,44 @@ def signals_live(run_id: int) -> FileResponse:
     return FileResponse(f, media_type="application/json")
 
 
+@app.get("/api/runs/{run_id}/hotspots")
+def hotspots(run_id: int) -> FileResponse:
+    """Ranked jammed junctions (the viewer's hotspot panel)."""
+    r = _run_row(run_id)
+    f = Path(r["trace_path"]).with_name("hotspots.json")
+    if not f.exists():
+        raise HTTPException(404, "no hotspots for this run — run `sim diagnose --run <name>`")
+    return FileResponse(f, media_type="application/json")
+
+
+@app.get("/api/runs/{run_id}/timeline")
+def run_timeline(run_id: int, bin: int = Query(60, ge=10)) -> dict:
+    """Active vehicles + mean speed per time bin — the scrubber histogram.
+    Computed once from the trajectory parquet and cached beside the run."""
+    r = _run_row(run_id)
+    trace = Path(r["trace_path"])
+    if not trace.exists():
+        raise HTTPException(404, "trace file missing")
+    cache = trace.with_name(f"timeline_{bin}.json")
+    if cache.exists() and cache.stat().st_mtime >= trace.stat().st_mtime:
+        return json.loads(cache.read_text())
+    import pandas as pd
+
+    df = pd.read_parquet(trace, columns=["t", "id", "speed"])
+    g = df.groupby(df["t"] // bin)
+    counts = g["id"].nunique()
+    speeds = (g["speed"].mean() * 3.6).round(1)
+    n = int(df["t"].max() // bin) + 1 if len(df) else 0
+    out = {
+        "bin": bin,
+        "t_max": int(df["t"].max()) if len(df) else 0,
+        "counts": [int(counts.get(i, 0)) for i in range(n)],
+        "mean_kmh": [float(speeds.get(i, 0.0)) for i in range(n)],
+    }
+    cache.write_text(json.dumps(out))
+    return out
+
+
 _AREAS = ("peninsula", "metro", "vancouver", "central")
 
 
@@ -273,17 +352,19 @@ def transit_vehicles(net: str = "peninsula") -> FileResponse:
 
 
 @app.get("/api/signals")
-def signals() -> Response:
-    """City of Vancouver traffic-signal locations (shown at street zoom)."""
+def signals(area: str = "peninsula") -> Response:
+    """City of Vancouver traffic-signal locations + kinds (per study area)."""
+    source = "cov_signals" if area == "peninsula" else f"cov_signals_{area}"
     conn = db.connect()
     rows = conn.execute(
-        "SELECT signal_id, lon, lat, sumo_tls_id FROM signals WHERE source = 'cov_signals'"
+        "SELECT signal_id, lon, lat, sumo_tls_id, kind FROM signals WHERE source = ?",
+        (source,),
     ).fetchall()
     conn.close()
     features = [
         {
             "type": "Feature",
-            "properties": {"id": r["signal_id"], "tls": r["sumo_tls_id"]},
+            "properties": {"id": r["signal_id"], "tls": r["sumo_tls_id"], "kind": r["kind"]},
             "geometry": {"type": "Point", "coordinates": [r["lon"], r["lat"]]},
         }
         for r in rows

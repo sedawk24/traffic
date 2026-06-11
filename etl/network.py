@@ -136,6 +136,14 @@ def _netconvert_args(osm_files: list[Path], net_path: Path, spec: dict) -> list[
         "true",
         "--tls.join",
         "true",
+        # Lane realism (Phase 9): import OSM turn:lanes so left-turn pockets
+        # exist where the city actually marks them (a left-turner no longer
+        # blocks the only through lane), and keep street names for tooltips
+        # and jam diagnostics.
+        "--osm.turn-lanes",
+        "true",
+        "--output.street-names",
+        "true",
         # Topology / geometry cleanup typical of OSM imports.
         "--geometry.remove",
         "true",
@@ -188,6 +196,13 @@ def build_net(osm_files: list[Path], spec: dict) -> tuple[Path, list[str]]:
     subprocess.run([str(config.sumo_bin("netconvert")), *args], check=True)
     if not net_path.exists():
         raise FileNotFoundError(f"netconvert did not produce {net_path}")
+    # a rebuilt net invalidates signal-timing add-files (they reference TLS ids
+    # of the old net) — quarantine them so librun can't silently load stale ones
+    for suffix in ("tls_coord", "tls_cycle"):
+        stale = config.SUMO_DIR / f"{spec['name']}_{suffix}.add.xml"
+        if stale.exists():
+            stale.replace(stale.with_suffix(".xml.stale"))
+            print(f"  quarantined stale {stale.name} -> .stale (regenerate via `sim retime`)")
     return net_path, args
 
 
