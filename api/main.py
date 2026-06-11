@@ -26,7 +26,16 @@ def _run_row(run_id: int) -> dict:
     conn.close()
     if row is None:
         raise HTTPException(404, f"run {run_id} not found")
-    return dict(row)
+    d = dict(row)
+    # registry stores absolute trace paths; remap onto this checkout's data/
+    # so a copied repo (laptop, other machine) still finds its runs
+    p = Path(d.get("trace_path") or "")
+    if d.get("trace_path") and not p.exists() and "runs" in p.parts:
+        i = p.parts.index("runs")
+        local = config.DATA_DIR.joinpath(*p.parts[i:])
+        if local.exists():
+            d["trace_path"] = str(local)
+    return d
 
 
 def _ensure_network_geojson(net_name: str = "peninsula") -> Path:
