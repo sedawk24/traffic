@@ -206,6 +206,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             "1" if meso else "0",
             str(prof["fcd_period"]),
             str(args.reroute_prob),
+            "0" if getattr(args, "no_tls_add", False) else "1",
         ],
         check=True,
         cwd=config.ROOT,
@@ -263,6 +264,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         help="online rerouting probability (0 disables — use 0 with equilibrium routes)",
     )
+    r.add_argument(
+        "--no-tls-add",
+        action="store_true",
+        help="skip the coordinated/adapted signal-timing add-files (raw net signals)",
+    )
+
+    s = sub.add_parser("sweep", help="density sweep: measure a variant across scales")
+    s.add_argument("--tag", required=True, help="sweep name (-> data/runs/sweeps/<tag>/)")
+    s.add_argument("--demand", choices=["central", "vancouver", "metro"], default="central")
+    s.add_argument("--scales", default="0.05,0.075,0.10", help="comma list of demand scales")
+    s.add_argument(
+        "--routes-files",
+        default=None,
+        help="label=path[,label=path...] — replay route files instead of generating demand",
+    )
+    s.add_argument("--begin", type=int, default=25200)
+    s.add_argument("--end", type=int, default=30600, help="default 08:30 (90-min AM window)")
+    s.add_argument("--seed", type=int, default=42)
+    s.add_argument("--no-transit", action="store_true")
+    s.add_argument("--no-tls-add", action="store_true", help="raw net signals (A/B fairness)")
+    s.add_argument("--reroute-prob", type=float, default=1.0)
 
     c = sub.add_parser("calibrate", help="compare a baseline run to bridge counts (GEH)")
     c.add_argument("--run", required=True, help="baseline run name to calibrate against")
@@ -271,6 +293,21 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--run", required=True, help="run name to analyze (e.g. central_final)")
     d.add_argument("--top", type=int, default=10, help="junctions to print (3x kept in json)")
     d.add_argument("--write-geojson", action="store_true", help="also emit hotspots.geojson")
+
+    e = sub.add_parser("equilibrium", help="duaIterate user-equilibrium routes (meso, junction control)")
+    e.add_argument("--name", required=True, help="output name (-> data/runs/<name>_dua/)")
+    e.add_argument("--demand", choices=["central", "vancouver", "metro"], default="central")
+    e.add_argument("--scale", type=float, default=0.10)
+    e.add_argument("--iterations", type=int, default=7)
+    e.add_argument("--begin", type=int, default=25200)
+    e.add_argument("--end", type=int, default=34200, help="default 09:30 (showcase window)")
+    e.add_argument("--seed", type=int, default=42)
+    e.add_argument("--samples", default=None, help="percent samples to emit (default 40,60,80,100)")
+
+    t = sub.add_parser("retime", help="tlsCoordinator green waves (+ optional Webster cycles)")
+    t.add_argument("--net", required=True, help="net name (e.g. central)")
+    t.add_argument("--routes", required=True, help="representative route file (.rou.xml[.gz])")
+    t.add_argument("--cycle", action="store_true", help="also run tlsCycleAdaptation (program a)")
     return p
 
 
@@ -286,4 +323,16 @@ def main(argv: list[str] | None = None) -> int:
         from sim import diagnose
 
         return diagnose.cmd_diagnose(args)
+    if args.command == "sweep":
+        from sim import sweep
+
+        return sweep.cmd_sweep(args)
+    if args.command == "equilibrium":
+        from sim import equilibrium
+
+        return equilibrium.cmd_equilibrium(args)
+    if args.command == "retime":
+        from sim import retime
+
+        return retime.cmd_retime(args)
     return 1

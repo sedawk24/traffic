@@ -347,7 +347,13 @@ def _assign(net, trips, out_routes: Path, net_name: str = "peninsula") -> None:
     with open(trips_xml, "w") as f:
         f.write("<routes>\n")
         for i, (t, o, d, vt) in enumerate(trips):
-            f.write(f'  <trip id="t{i}" type="{vt}" depart="{t}" from="{o}" to="{d}"/>\n')
+            # departLane/Speed/Pos (Phase 9): insert moving on the best lane at a
+            # free spot — the defaults dropped every vehicle at speed 0 in lane 0,
+            # manufacturing a brake-wave at each busy insertion edge.
+            f.write(
+                f'  <trip id="t{i}" type="{vt}" depart="{t}" from="{o}" to="{d}"'
+                ' departLane="best" departSpeed="max" departPos="random_free"/>\n'
+            )
         f.write("</routes>\n")
 
     env = {**os.environ, "SUMO_HOME": str(config.sumo_home())}

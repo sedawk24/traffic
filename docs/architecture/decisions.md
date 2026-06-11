@@ -145,3 +145,47 @@ A running log of significant architectural decisions made during this project. E
 **Alternatives considered:**
 - libsumo for the run + post-process in a child process: keeps the API literal but adds subprocess plumbing and inter-process stat passing; deferred unless in-process control is needed.
 - Import-order juggling of pyarrow vs libsumo: fragile and unreliable.
+
+---
+
+## 2026-06-11 — Signal ground truth: CoV inventory decides which junctions are signalized
+
+**Decision:** Treat the City of Vancouver's signal-location dataset (with its `type` — Fixed Time / Semi Actuated / Fully Actuated vs Pedestrian Actuated / RRFB / Special Crosswalk) as ground truth for the TLS set of every Vancouver-area net. `etl signal-truth --area <a>` reconciles the built net against it: net TLS with no CoV device nearby or a ped-only device become priority junctions (with no pedestrians simulated, a ped-actuated signal rests green for cars); CoV vehicle signals missing a TLS get one. Implementation is a plain-XML round-trip (export plain → rewrite junction `type` attrs → rebuild) because netconvert's `--tls.unset` cannot strip TLS already baked into a net; the round-trip keeps edge ids stable so demand/transit artifacts survive.
+
+**Reasoning:** netconvert (OSM tags + `--tls.guess-signals` + joins) signalized 700 junction nodes in the central net vs ~298 real vehicle signals — every bogus signal periodically stops traffic for nobody, and Phase 8c proved the capacity ceiling is intersection-bound. Ground-truthing is data-grounded (open CoV data, consistent with the project ethos) and measured +6% mean speed at scale 0.075 over the gateway-fixed baseline.
+
+**Alternatives considered:**
+- `--tls.unset` on a net-to-net pass: confirmed ineffective (TLS already instantiated).
+- Trusting OSM signal tags: they are the over-population source (crossing signals tagged as `highway=traffic_signals`).
+
+---
+
+## 2026-06-11 — External demand enters on severed-arterial gateway stubs, capacity/d² weighted
+
+**Decision:** In single-city demand (`sim/demand_metro.py`), external CSDs draw origins/destinations from the net's severed arterials — edges the bbox cut left with no incoming (entries) or no outgoing (exits) — weighted by lanes / distance²-to-centroid. The home city's trip-end pool excludes motorway/trunk/primary mid-blocks.
+
+**Reasoning:** The previous "K=80 nearest edges" pooling funneled every eastern municipality's demand into Chinatown side streets; `sim diagnose` showed the resulting standing queue along Main/Hastings/Powell/Gore held a third of all stopped time. Stubs are the topologically true gateways (Kingsway/Hastings/Broadway/Terminal east, the bridge approaches south, the Causeway north), and capacity-weighting spreads load like reality does. Measured: at scale 0.075, mean speed 12.5 → 22.4 km/h, completed trips +74 %.
+
+**Alternatives considered:**
+- Geometric boundary band: caught bbox-extreme edges (Stanley Park Drive), not the real cuts.
+- Larger K with uniform weights: still corner-clustered, still side-street entries.
+
+---
+
+## 2026-06-11 — Viewer: runtime dark-restyle of the hosted positron basemap
+
+**Decision:** The dark-cinematic basemap is produced at runtime: try openfreemap's hosted `dark` style; otherwise fetch the positron style JSON and recolor its layers to the app palette in the browser (water/parks/roads/labels reclassified by layer id; POI/shield layers dropped). No tile re-hosting. 3D buildings come from the same vector source's `building` layer as a fill-extrusion added at z≥14.5.
+
+**Reasoning:** A bespoke hosted style or PMTiles pipeline is real infrastructure (backlogged since Phase 3); restyling the already-hosted vector tiles costs one fetch and keeps the offline-PMTiles option open. The recolor is defensive (per-layer try, stock-positron fallback).
+
+**Alternatives considered:**
+- Self-hosted PMTiles + custom style: still the eventual offline answer (backlog).
+- maplibre dark styles from other providers: new dependency/keys.
+
+---
+
+## 2026-06-11 — Measurement-gated tuning: `sim sweep` is the arbiter; no infinite HUD animations
+
+**Decision:** Every capacity-affecting change lands only if a fixed-seed `sim sweep` (scale ladder; FCD-weighted mean speed, %stopped, teleports, completions) clears the gate (at 0.075: mean +≥5 % or stopped −≥3 pts, teleports not worse). Two implementation rules from profiling the new viewer: deck.gl layer `data` must be referentially stable across frames (a per-frame `concat` re-uploaded ~600k trail vertices every frame), and the HUD uses no infinite CSS animations (an animated `box-shadow`/opacity on one 9-px dot forced full-page recomposites of both WebGL canvases — seconds per frame under software rendering).
+
+**Reasoning:** Phase 8c showed intuition failing ("0 teleports" runs that were actually gridlocked); the sweep keeps Phase 9 honest. The two viewer rules came from CPU-profiling real hangs to (program)/compositor time, not JS.
